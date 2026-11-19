@@ -7,40 +7,39 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "common.h"
 
 void echo_client(int sockfd) {
-	char buff[MSG_LEN];
-	int n;
-	while (1) {
-		// Cleaning memory
-		memset(buff, 0, MSG_LEN);
-		// Getting message from client
-		printf("Message: ");
-		n = 0;
-		while ((buff[n++] = getchar()) != '\n') {} // trailing '\n' will be sent
-		// Sending message (ECHO)
-		if (send(sockfd, buff, strlen(buff), 0) <= 0) {
-			break;
-		}
-		printf("Message sent!\n");
-		// Cleaning memory
-		memset(buff, 0, MSG_LEN);
-		// Receiving message
-		if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
-			break;
-		}
-		printf("Received: %s", buff);
-	}
+	// char buff[MSG_LEN];
+	// int n;
+	// while (1) {
+	// 	// Cleaning memory
+	// 	memset(buff, 0, MSG_LEN);
+	// 	// Getting message from client
+	// 	printf("Message: ");
+	// 	n = 0;
+	// 	while ((buff[n++] = getchar()) != '\n') {} // trailing '\n' will be sent
+	// 	// Sending message (ECHO)
+	// 	if (send(sockfd, buff, strlen(buff), 0) <= 0) {
+	// 		break;
+	// 	}
+	// 	printf("Message sent!\n");
+	// 	// Cleaning memory
+	// 	memset(buff, 0, MSG_LEN);
+	// 	// Receiving message
+	// 	if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
+	// 		break;
+	// 	}
+	// 	printf("Received: %s", buff);
+	// }
 }
 
-int handle_connect() {
+int handle_connect(char *host, char *port) {
 	struct addrinfo hints, *result, *rp;
 	int sfd;
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
-	if (getaddrinfo(SERV_ADDR, SERV_PORT, &hints, &result) != 0) {
+	if (getaddrinfo(host, port, &hints, &result) != 0) {
 		perror("getaddrinfo()");
 		exit(EXIT_FAILURE);
 	}
@@ -50,7 +49,8 @@ int handle_connect() {
 			continue;
 		}
 		if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1) {
-			break;
+			printf("Connected\n");
+            break;
 		}
 		close(sfd);
 	}
@@ -62,9 +62,16 @@ int handle_connect() {
 	return sfd;
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+	if (argc < 3) {
+		fprintf(stderr, "Usage: %s <host> <port>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+    char *host = argv[1];
+    char *port = argv[2];
 	int sfd;
-	sfd = handle_connect();
+	sfd = handle_connect(host, port);
 	echo_client(sfd);
 	close(sfd);
 	return EXIT_SUCCESS;
