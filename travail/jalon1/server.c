@@ -7,23 +7,24 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define MSG_LEN 1024
 
 void echo_server(int sockfd) {
-	// char buff[MSG_LEN];
-	// while (1) {
-	// 	// Cleaning memory
-	// 	memset(buff, 0, MSG_LEN);
-	// 	// Receiving message
-	// 	if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
-	// 		break;
-	// 	}
-	// 	printf("Received: %s", buff);
-	// 	// Sending message (ECHO)
-	// 	if (send(sockfd, buff, strlen(buff), 0) <= 0) {
-	// 		break;
-	// 	}
-	// 	printf("Message sent!\n");
-	// }
+	char buff[MSG_LEN];
+	while (1) {
+		// Cleaning memory
+		memset(buff, 0, MSG_LEN);
+		// Receiving message
+		if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
+			break;
+		}
+		printf("Received: %s", buff);
+		// Sending message (ECHO)
+		if (send(sockfd, buff, strlen(buff), 0) <= 0) {
+			break;
+		}
+		printf("Message sent!\n");
+	}
 }
 
 int handle_bind(char *port) {

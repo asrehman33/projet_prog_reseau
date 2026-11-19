@@ -7,30 +7,31 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define MSG_LEN 1024
 
 void echo_client(int sockfd) {
-	// char buff[MSG_LEN];
-	// int n;
-	// while (1) {
-	// 	// Cleaning memory
-	// 	memset(buff, 0, MSG_LEN);
-	// 	// Getting message from client
-	// 	printf("Message: ");
-	// 	n = 0;
-	// 	while ((buff[n++] = getchar()) != '\n') {} // trailing '\n' will be sent
-	// 	// Sending message (ECHO)
-	// 	if (send(sockfd, buff, strlen(buff), 0) <= 0) {
-	// 		break;
-	// 	}
-	// 	printf("Message sent!\n");
-	// 	// Cleaning memory
-	// 	memset(buff, 0, MSG_LEN);
-	// 	// Receiving message
-	// 	if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
-	// 		break;
-	// 	}
-	// 	printf("Received: %s", buff);
-	// }
+	char buff[MSG_LEN];
+	int n;
+	while (1) {
+		// Cleaning memory
+		memset(buff, 0, MSG_LEN);
+		// Getting message from client
+		printf("Message: ");
+		n = 0;
+		while ((buff[n++] = getchar()) != '\n') {} // trailing '\n' will be sent
+		// Sending message (ECHO)
+		if (send(sockfd, buff, strlen(buff), 0) <= 0) {
+			break;
+		}
+		printf("Message sent!\n");
+		// Cleaning memory
+		memset(buff, 0, MSG_LEN);
+		// Receiving message
+		if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
+			break;
+		}
+		printf("Received: %s", buff);
+	}
 }
 
 int handle_connect(char *host, char *port) {
