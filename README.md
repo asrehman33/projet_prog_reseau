@@ -1,1 +1,91 @@
-# projet_prog_reseau
+# - Projet de programmation réseau
+
+Ce projet consiste à développer en binôme une application de messagerie instantanée client/serveur en C. Elle doit permettre des échanges entre deux utilisateurs, entre plusieurs utilisateurs et, selon les jalons, des échanges de fichiers. Le projet a pour objectif principal de mettre en pratique l'API sockets POSIX et les communications TCP/IP.
+
+Vous construirez l'application progressivement. **Un jalon doit être entièrement terminé et soumis avant de commencer le suivant.** Vous avez 14h40 en séances encadrées. L'intégralité du projet est réalisable sur ce créneau là. Vous ne devez PAS travailler à la maison sur ce projet, il est UNIQUEMENT à réaliser en séance.
+
+## Parcours du projet
+
+Lisez d'abord les règles communes ci-dessous, puis avancez dans l'ordre des jalons.
+
+| Étape | Objectif | Spécification |
+| --- | --- | --- |
+| Jalon 1 | Client/serveur TCP IPv4, écho et multi-clients | [jalon1.md](jalon1.md) |
+| Jalon 2 | Utilisateurs, pseudos et messagerie | [jalon2.md](jalon2.md) |
+| Jalon 3 | Transfert de fichiers pair à pair | [jalon3.md](jalon3.md) |
+| Jalon 4 | Salons de discussion | [jalon4.md](jalon4.md) |
+
+Les [ressources](ressources.md) regroupent les conseils de débogage et le rappel de C fourni avec le sujet. Le [contrat de protocole](protocole.md) définit le format des trames, les limites et les erreurs de communication à respecter.
+
+## Dépôt de départ
+
+Après avoir récupéré le dépôt, vous y trouverez :
+
+- `sample-jalon1/` et `sample-jalon2/` : squelettes de code et Makefiles pour les jalons 1 et 2 ;
+- `travail/` : répertoire de développement. C'est ce répertoire qui est évalué pour les soumissions intermédiaires ;
+- `rendu_final/` : répertoire destiné au rendu final ;
+- `info.txt` : à compléter avec les noms, prénoms et logins GitHub du binôme.
+
+## Dépôt GitHub
+
+Pour pousser votre code, créez un *Personal Access Token* GitHub en suivant [le guide officiel](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token). Lors d'un `git push`, utilisez ce jeton à la place du mot de passe.
+
+## Soumettre un jalon
+
+Chaque jalon est soumis sur GitHub sous la forme d'une *release*, qui fige l'état du dépôt à un instant donné.
+
+1. Placez le code attendu dans le bon répertoire : `travail/` pour les jalons intermédiaires, `rendu_final/` pour le rendu final.
+2. Créez une release nommée `jalonx`, où `x` est le numéro du jalon.
+3. Publiez la release. Une release laissée à l'état de brouillon est ignorée.
+4. **N'ajoutez pas de fichiers joints à la release**. Ils ne seront pas pris en compte lors de l'évaluation.
+
+Consultez au besoin [la documentation GitHub sur la création de releases](https://docs.github.com/repositories/releasing-projects-on-github/managing-releases-in-a-repository). 
+
+
+### Échéances du projet et des jalons
+
+Chaque jalon devra être livré à la fin d'une séance en classe au moyen, d'une release. Vous devrez faire une démonstration de votre code aux encadrants lors de la dernière séance. La version finale du code à rendre devra être mise dans une release faite lors de la dernière séance. Toute production du code a posteriori ne sera pas prise en compte.
+
+| Livrable | Échéance |
+| --- | --- |
+| Jalon 1 | 2h |
+| Jalon 2 | 3h |
+| Jalon 3 | 3h |
+| Jalon 4 | 3h |
+| Rendu final | A l'avant dernière séance |
+| Démo et evaluation du projet | Lors de la dernière séance |
+
+### IA et production logiciel dans ce projet 
+
+L'utilisation d'outils IA pour le développement et la production de code n'est pas interdite dans le cadre de ce projet. En revanche, les outils IA empêchent, dans le cadre de l'apprentissage via ce projet, de monter en compétence et en connaissance. Pour cette raison, il est plus que fortement recommandé de **s'interdire les outils IA** pour produire ou développer. La seule utilisation cohérente et tolérée pouvant avoir un impact positif est l'utilisation des IA pour clarifier le fonctionnement des fonctions que nous avons vu ensemble en cours (en aucun cas pour proposer du code que vous reprendriez par la suite). 
+
+
+## Rendu final
+
+Copiez le code de `travail/` vers `rendu_final/`. Le rendu final doit impérativement compiler avec un Makefile, sans erreur ni avertissement, sur les machines de l'ENSEIRB-MATMECA. Vous pouvez repartir des Makefiles fournis dans `sample-jalon1/` et `sample-jalon2/`.
+
+Pour développer et tester sur les machines de l'école, connectez-vous à `ssh.enseirb.fr`, puis à une machine de TP. La commande `netgroup <numéro_de_salle>` permet d'identifier les machines disponibles, par exemple `netgroup I101`.
+
+## Évaluation
+
+L'évaluation porte notamment sur :
+
+- le respect des modalités et échéances de soumission
+- l'implémentation des fonctionnalités demandées
+- la robustesse face à des messages non implémentés ou malformés, côté client comme côté serveur
+- la libération de la mémoire et la fermeture des sockets, notamment vérifiées avec `valgrind` et `lsof`.
+
+### Bonus et malus
+
+| Critère | Effet |
+| --- | --- |
+| Consignes non respectées : échéances, `info.txt`, Makefile, erreurs ou avertissements importants à la compilation | -2 points |
+| Mauvaise utilisation des primitives de lecture et d'écriture sur sockets | -2 points |
+| Code peu lisible : indentation, `main()` trop long, absence de factorisation ou de fonctions | -2 points |
+| Mémoire allouée mais non libérée | -2 points |
+| Descripteurs de sockets ou fichiers non fermés | -2 points |
+| Fonctionnement en IPv4 et IPv6 | +0,25 point |
+
+Chaque réalisation de jalon donne des points dans la note finale. Pour obtenir les points d'un jalon, toutes les fonctionnalités et spécificités des jalons précédents doivent être implémentées sans erreur.
+
+*Surprise* : ajoutez des fonctionnalités au-delà des jalons 1 à 4.
