@@ -72,6 +72,7 @@ int echo_client(int sockfd) {
 	char buff[BUFFER_SIZE];
 	while (1) {
 		// Send
+        memset(buff, 0, BUFFER_SIZE);
 		read(STDIN_FILENO, buff, BUFFER_SIZE);
 		int len = strlen(buff);
 		send_next_message_size(sockfd, len);
