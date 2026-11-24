@@ -6,8 +6,9 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <poll.h>
 
-#define BUFFER_SIZE 10
+#define BUFFER_SIZE 1024
 
 int die(int ret_value, char *msg) {
     if (ret_value < 0) {
@@ -75,6 +76,8 @@ void echo_client(int sockfd) {
 		int len = strlen(buff);
 		send_next_message_size(sockfd, len);
 		send_message(sockfd, buff, len);
+		printf("Send: %s", buff);
+
 
 		// Recv
 		int msg_size;
@@ -88,6 +91,23 @@ void echo_client(int sockfd) {
 	}
 }
 
+void reply_server(int sockfd) {
+	int msg_size;
+	if (recv_next_message_size(sockfd, &msg_size) < 0) {
+		printf("Server closed connection\n");
+		return;
+	}
+	if (msg_size > 0) {
+		char *msg = malloc(msg_size);
+		if (recv_message(sockfd, msg, msg_size) < 0) {
+			printf("Server closed connection\n");
+			free(msg);
+			return;
+		}
+		printf("Received from server: %.*s\n", msg_size, msg);
+		free(msg);
+	}
+}
 int handle_connect(char *host, char *port) {
 	struct addrinfo hints, *result, *rp;
 	int sfd;
@@ -127,8 +147,33 @@ int main(int argc, char *argv[]) {
     char *port = argv[2];
 	int sfd;
 	sfd = handle_connect(host, port);
-	echo_client(sfd);
-	close(sfd);
-	return EXIT_SUCCESS;
+
+	struct pollfd fds[2] = {0};
+    fds[0].fd = 0;
+    fds[0].events = POLLIN;
+    fds[0].revents = 0;
+    fds[1].fd = sfd;
+    fds[1].events = POLLIN;
+    fds[1].revents = 0;
+
+	while (1) {
+        int nfds = poll(fds, 2, -1);
+        if (nfds < 0) {
+            perror("poll");
+			close(sfd);
+            exit(EXIT_FAILURE);
+        }
+        if (fds[0].revents & POLLIN) {
+            // Read from stdin
+            echo_client(sfd);
+            fds[0].revents = 0;
+        }
+        if (fds[1].revents & POLLIN) {
+            // Read from server
+			sleep(1);
+            reply_server(sfd);
+            fds[1].revents = 0;
+        }
+    }
 }
 
