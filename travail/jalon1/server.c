@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <poll.h>
+#include "chained_list.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_CNN 20
@@ -130,7 +131,7 @@ int handle_bind(char *port) {
 	return sfd;
 }
 
-int handle_multiple_connection(int listen_df)
+int handle_multiple_connection(int listen_df, struct list *lst)
 {
 	struct sockaddr_in client_addr;
     socklen_t size_addr = sizeof(client_addr);
@@ -167,9 +168,12 @@ int handle_multiple_connection(int listen_df)
                         fds[j].fd = new_fd;
                         fds[j].events = POLLIN;
                         fds[j].revents = 0;
+                        struct node *node = add_node(lst, new_fd, client_addr);
+						print_node(node);
                         break;
                     }
                 }
+				print_list(lst);
                 
                 fds[i].revents = 0;
             }
@@ -177,6 +181,8 @@ int handle_multiple_connection(int listen_df)
             {
                 if (echo_server(fds[i].fd, i) == -1) {
                     close(fds[i].fd);
+                    remove_by_fd(lst, fds[i].fd);
+					print_list(lst);
                     fds[i].fd = -1;
                     fds[i].events = 0;
                 }
@@ -184,7 +190,10 @@ int handle_multiple_connection(int listen_df)
             }
             else if ((fds[i].revents & POLLHUP) && fds[i].fd != listen_df)
             {
+				// Client disconnected, remove from list and close socket
                 printf("Connection closed by client 3\n");
+                remove_by_fd(lst, fds[i].fd);
+				print_list(lst);
                 close(fds[i].fd);
                 fds[i].fd = -1;
                 fds[i].events = 0;
@@ -209,7 +218,9 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	handle_multiple_connection(sfd);
+	struct list lst = {0};
+
+	handle_multiple_connection(sfd, &lst);
 	close(sfd);
 	return EXIT_SUCCESS;
 }
