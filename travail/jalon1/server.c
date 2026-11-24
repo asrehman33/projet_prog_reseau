@@ -69,23 +69,28 @@ int recv_message(int sockfd, char *msg, int msg_size) {
     return 0;
 }
 
-void echo_server(int sockfd, int client_index) {
+int echo_server(int sockfd, int client_index) {
 	char buff[BUFFER_SIZE];
 	int msg_size;
 	// Recv
 	if (recv_next_message_size(sockfd, &msg_size) == -1) {
-		return;
+		return -1;
 	}
 	if (recv_message(sockfd, buff, msg_size) == -1) {
-		return;
+		return -1;
 	}
 	printf("Received: %.*s", msg_size, buff);
+
+	if (strcmp(buff, "/quit\n") == 0) {
+		return -1;
+	}
 
 	// Send (ECHO)
 	send_next_message_size(sockfd, msg_size);
 	send_message(sockfd, buff, msg_size);
 
 	printf("Sent to client %d: %.*s\n", client_index, msg_size, buff);
+	return 0;
 }
 
 int handle_bind(char *port) {
@@ -170,7 +175,11 @@ int handle_multiple_connection(int listen_df)
             }
             else if ((fds[i].revents & POLLIN) && fds[i].fd != listen_df)
             {
-                echo_server(fds[i].fd, i);
+                if (echo_server(fds[i].fd, i) == -1) {
+                    close(fds[i].fd);
+                    fds[i].fd = -1;
+                    fds[i].events = 0;
+                }
 				fds[i].revents = 0;
             }
             else if ((fds[i].revents & POLLHUP) && fds[i].fd != listen_df)

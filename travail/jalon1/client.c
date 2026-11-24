@@ -68,7 +68,7 @@ int recv_message(int sockfd, char *msg, int msg_size) {
     return 0;
 }
 
-void echo_client(int sockfd) {
+int echo_client(int sockfd) {
 	char buff[BUFFER_SIZE];
 	while (1) {
 		// Send
@@ -78,6 +78,8 @@ void echo_client(int sockfd) {
 		send_message(sockfd, buff, len);
 		printf("Send: %s", buff);
 
+		if (strcmp(buff, "/quit\n") == 0)
+			return -1;
 
 		// Recv
 		int msg_size;
@@ -89,6 +91,7 @@ void echo_client(int sockfd) {
 		}
 		printf("Received: %.*s", msg_size, buff);
 	}
+	return 0;
 }
 
 void reply_server(int sockfd) {
@@ -165,7 +168,10 @@ int main(int argc, char *argv[]) {
         }
         if (fds[0].revents & POLLIN) {
             // Read from stdin
-            echo_client(sfd);
+            if (echo_client(sfd) == -1) {
+                close(sfd);
+                return 0;
+            }
             fds[0].revents = 0;
         }
         if (fds[1].revents & POLLIN) {
