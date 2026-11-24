@@ -7,30 +7,84 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define MSG_LEN 1024
+#define BUFFER_SIZE 10
+
+int die(int ret_value, char *msg) {
+    if (ret_value < 0) {
+        perror(msg);
+        exit(EXIT_FAILURE);
+    }
+    return 0;
+}
+
+int send_next_message_size(int sockfd, int msg_size) {
+    int bytes_sent = 0;
+    int ret;
+    while (bytes_sent != sizeof(msg_size)) {
+        ret = write(sockfd, ((char *)&msg_size) + bytes_sent, sizeof(msg_size) - bytes_sent);
+        die(ret, "On writing message size");
+        bytes_sent += ret;
+    }
+    return 0;
+}
+
+int send_message(int sockfd, char *msg, int msg_size) {
+    int bytes_sent = 0;
+    int ret;
+    while (bytes_sent != msg_size) {
+        ret = write(sockfd, msg + bytes_sent, msg_size - bytes_sent);
+        die(ret, "On writing");
+        bytes_sent += ret;
+    }
+    return 0;
+}
+
+int recv_next_message_size(int sockfd, int *msg_size) {
+    int bytes_read = 0;
+    int ret;
+    while (bytes_read != sizeof(int)) {
+        ret = read(sockfd, ((char *)msg_size) + bytes_read, sizeof(int) - bytes_read);
+        die(ret, "On reading message size");
+        if (ret == 0) {
+            return -1;
+        }
+        bytes_read += ret;
+    }
+    return 0;
+}
+
+int recv_message(int sockfd, char *msg, int msg_size) {
+    int bytes_read = 0;
+    int ret;
+    while (bytes_read != msg_size) {
+        ret = read(sockfd, msg + bytes_read, msg_size - bytes_read);
+        die(ret, "On reading");
+        if (ret == 0) {
+            return -1;
+        }
+        bytes_read += ret;
+    }
+    return 0;
+}
 
 void echo_client(int sockfd) {
-	char buff[MSG_LEN];
-	int n;
+	char buff[BUFFER_SIZE];
 	while (1) {
-		// Cleaning memory
-		memset(buff, 0, MSG_LEN);
-		// Getting message from client
-		printf("Message: ");
-		n = 0;
-		while ((buff[n++] = getchar()) != '\n') {} // trailing '\n' will be sent
-		// Sending message (ECHO)
-		if (send(sockfd, buff, strlen(buff), 0) <= 0) {
+		// Send
+		read(STDIN_FILENO, buff, BUFFER_SIZE);
+		int len = strlen(buff);
+		send_next_message_size(sockfd, len);
+		send_message(sockfd, buff, len);
+
+		// Recv
+		int msg_size;
+		if (recv_next_message_size(sockfd, &msg_size) == -1) {
 			break;
 		}
-		printf("Message sent!\n");
-		// Cleaning memory
-		memset(buff, 0, MSG_LEN);
-		// Receiving message
-		if (recv(sockfd, buff, MSG_LEN, 0) <= 0) {
+		if (recv_message(sockfd, buff, msg_size) == -1) {
 			break;
 		}
-		printf("Received: %s", buff);
+		printf("Received: %.*s", msg_size, buff);
 	}
 }
 

@@ -8,19 +8,82 @@
 #include <unistd.h>
 #include <poll.h>
 
-#define MSG_LEN 1024
+#define BUFFER_SIZE 1024
 #define MAX_CNN 20
 
-void echo_server(int sockfd) {
-	char buff[MSG_LEN];
-	// Cleaning memory
-	memset(buff, 0, MSG_LEN);
-	// Receiving message
-	recv(sockfd, buff, MSG_LEN, 0);
+int die(int ret_value, char *msg) {
+    if (ret_value < 0) {
+        perror(msg);
+        exit(EXIT_FAILURE);
+    }
+    return 0;
+}
 
-	printf("Received: %s", buff);
-	// Sending message (ECHO)
-	send(sockfd, buff, strlen(buff), 0);
+int send_next_message_size(int sockfd, int msg_size) {
+    int bytes_sent = 0;
+    int ret;
+    while (bytes_sent != sizeof(msg_size)) {
+        ret = write(sockfd, ((char *)&msg_size) + bytes_sent, sizeof(msg_size) - bytes_sent);
+        die(ret, "On writing message size");
+        bytes_sent += ret;
+    }
+    return 0;
+}
+
+int send_message(int sockfd, char *msg, int msg_size) {
+    int bytes_sent = 0;
+    int ret;
+    while (bytes_sent != msg_size) {
+        ret = write(sockfd, msg + bytes_sent, msg_size - bytes_sent);
+        die(ret, "On writing");
+        bytes_sent += ret;
+    }
+    return 0;
+}
+
+int recv_next_message_size(int sockfd, int *msg_size) {
+    int bytes_read = 0;
+    int ret;
+    while (bytes_read != sizeof(int)) {
+        ret = read(sockfd, ((char *)msg_size) + bytes_read, sizeof(int) - bytes_read);
+        die(ret, "On reading message size");
+        if (ret == 0) {
+            return -1;
+        }
+        bytes_read += ret;
+    }
+    return 0;
+}
+
+int recv_message(int sockfd, char *msg, int msg_size) {
+    int bytes_read = 0;
+    int ret;
+    while (bytes_read != msg_size) {
+        ret = read(sockfd, msg + bytes_read, msg_size - bytes_read);
+        die(ret, "On reading");
+        if (ret == 0) {
+            return -1;
+        }
+        bytes_read += ret;
+    }
+    return 0;
+}
+
+void echo_server(int sockfd) {
+	char buff[BUFFER_SIZE];
+	int msg_size;
+	// Recv
+	if (recv_next_message_size(sockfd, &msg_size) == -1) {
+		return;
+	}
+	if (recv_message(sockfd, buff, msg_size) == -1) {
+		return;
+	}
+	printf("Received: %.*s", msg_size, buff);
+
+	// Send (ECHO)
+	send_next_message_size(sockfd, msg_size);
+	send_message(sockfd, buff, msg_size);
 
 	printf("Message sent!\n");
 }
@@ -108,6 +171,7 @@ int handle_multiple_connection(int listen_df)
             else if ((fds[i].revents & POLLIN) && fds[i].fd != listen_df)
             {
                 echo_server(fds[i].fd);
+				printf("Message echoed back to client\n");
 				fds[i].revents = 0;
             }
             else if ((fds[i].revents & POLLHUP) && fds[i].fd != listen_df)
