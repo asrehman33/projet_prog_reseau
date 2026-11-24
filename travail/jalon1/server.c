@@ -39,6 +39,13 @@ int handle_bind(char *port) {
 	for (rp = result; rp != NULL; rp = rp->ai_next) {
 		sfd = socket(rp->ai_family, rp->ai_socktype,
 		rp->ai_protocol);
+
+		// Allows the socket to be reused immediately after the program terminates
+		if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) == -1) {
+			perror("setsockopt - in main");
+			exit(1);
+		}
+
 		if (sfd == -1) {
 			continue;
 		}
@@ -48,7 +55,7 @@ int handle_bind(char *port) {
 		close(sfd);
 	}
 	if (rp == NULL) {
-		fprintf(stderr, "Could not bind\n");
+		perror("Could not bind");
 		exit(EXIT_FAILURE);
 	}
 	freeaddrinfo(result);
@@ -123,19 +130,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	char *port = argv[1];
-	struct sockaddr cli;
-	int sfd, connfd;
-	socklen_t len;
+	int sfd;
 	sfd = handle_bind(port);
 	if ((listen(sfd, SOMAXCONN)) != 0) {
 		perror("listen()\n");
 		exit(EXIT_FAILURE);
 	}
-	len = sizeof(cli);
-	if ((connfd = accept(sfd, (struct sockaddr*) &cli, &len)) < 0) {
-		perror("accept()\n");
-		exit(EXIT_FAILURE);
-	}
+
 	handle_multiple_connection(sfd);
 	close(sfd);
 	return EXIT_SUCCESS;
