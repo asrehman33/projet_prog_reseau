@@ -156,6 +156,22 @@ int echo_client(int sockfd, const char *nick) {
             msg.pld_len = strlen(msgall_payload);
             payload = msgall_payload;
         }
+
+        if (strncmp(buff, "/msg ", 5) == 0) {
+            char *dest = buff + 5;
+            dest[strcspn(dest, "\n")] = '\0'; // Replace \n with \0
+            char *msg_payload = strchr(dest, ' '); // Find the first space separating the nickname and the message
+            if (msg_payload == NULL) {
+                fprintf(stderr, "Usage: /msg <nickname> <message>\n");
+                return 0;
+            }
+            *msg_payload = '\0';
+            msg_payload++;
+            msg.type = UNICAST_SEND;
+            strncpy(msg.infos, dest, INFOS_LEN - 1);
+            msg.pld_len = strlen(msg_payload);
+            payload = msg_payload;
+        }
     }
 
     if (send_protocol_message(sockfd, &msg, payload) == -1) {  
@@ -196,6 +212,10 @@ int reply_server(int sockfd, char *nick) {
 
     if (msg.type == BROADCAST_SEND) {
         printf("[%s] %s\n", msg.nick_sender, payload);
+    }
+
+    if (msg.type == UNICAST_SEND) {
+        printf("[%s] (privé) %s\n", msg.nick_sender, payload);
     }
     return 0;
 }

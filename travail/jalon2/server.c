@@ -258,7 +258,6 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
          memcpy(pld_load, pld_recv, (size_t)msg.pld_len + 1);
 
         struct message reply;
-        printf("here\n");
         memset(&reply, 0, sizeof(reply));
         reply.type = BROADCAST_SEND;
         reply.pld_len = msg.pld_len;
@@ -275,10 +274,26 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
             }
             current = current->next;
         }
+        return 0;
+    }
 
-        // if (send_protocol_message(sockfd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
-        //     return -1;
-        // }
+    if (msg.type == UNICAST_SEND) {
+        struct node *dest = find_client_by_nickname(msg.infos, lst);
+        memcpy(pld_load, pld_recv, (size_t)msg.pld_len);
+
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = UNICAST_SEND;
+        reply.pld_len = msg.pld_len;
+
+        strncpy(reply.nick_sender, msg.nick_sender, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        if (dest != NULL) {
+            if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+                return -1;
+            }
+        }
         return 0;
     }
 
