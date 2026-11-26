@@ -181,6 +181,12 @@ int reply_server(int sockfd, char *nick) {
             printf("[%s] %s%s", msg.nick_sender, msg.infos, payload);
         }
     }
+
+    if (msg.type == NICKNAME_INFOS) {
+        if (msg.status == OK) {
+            printf("[%s] %s%s", msg.nick_sender, msg.infos, payload);
+        }
+    }
     return 0;
 }
 int handle_connect(char *host, char *port) {
