@@ -268,8 +268,10 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
 
         struct node *current = lst->head;
         while (current != NULL) {
-            if (send_protocol_message(current->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
-                return -1;
+            if (strcmp(current->nickname, msg.nick_sender) != 0) {
+                if (send_protocol_message(current->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+                    return -1;
+                }
             }
             current = current->next;
         }
