@@ -134,14 +134,12 @@ int echo_client(int sockfd, const char *nick) {
             fprintf(stderr, "Nickname not set.\n Use /nick <nickname> to set it.\n");
             return 0;
         }
-        // printf("Usage: /nick <pseudo>\n");
-        // return 0;
     }
 
     if (send_protocol_message(sockfd, &msg, NULL) == -1) {  
         return 0;
     }
-    printf("Send: %s %s\n", msg_type_str[msg.type], msg.infos);
+    // printf("Send: %s %s\n", msg_type_str[msg.type], msg.infos);
     return 0;
 }
 
@@ -160,11 +158,9 @@ int reply_server(int sockfd, char *nick) {
         else {
             strncpy(nick, msg.infos, NICK_LEN - 1);
             nick[NICK_LEN - 1] = '\0';
-            printf("Nickname set to: %s\n", nick);
+            printf("[%s] %s %s\n", msg.nick_sender, payload, msg.infos);
         }
     }
-    // printf("Received from server: %s | infos=%s | payload=%s\n",
-    //        msg_type_str[msg.type], msg.infos, payload);
     return 0;
 }
 int handle_connect(char *host, char *port) {
