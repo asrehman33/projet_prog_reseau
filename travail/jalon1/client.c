@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <poll.h>
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 10
 
 int die(int ret_value, char *msg) {
     if (ret_value < 0) {
@@ -69,48 +69,40 @@ int recv_message(int sockfd, char *msg, int msg_size) {
 }
 
 int echo_client(int sockfd) {
-	char buff[BUFFER_SIZE];
-	while (1) {
-		// Send
-        memset(buff, 0, BUFFER_SIZE);
-		read(STDIN_FILENO, buff, BUFFER_SIZE);
-		int len = strlen(buff);
-		send_next_message_size(sockfd, len);
-		send_message(sockfd, buff, len);
-		printf("Send: %s", buff);
+	char buff[BUFFER_SIZE];		
+    
+    // Send
+    memset(buff, 0, BUFFER_SIZE);
+    read(STDIN_FILENO, buff, BUFFER_SIZE);
+    int len = strlen(buff);
+    send_next_message_size(sockfd, len);
+    send_message(sockfd, buff, len);
+    printf("Send: %s\n", buff);
 
-		if (strcmp(buff, "/quit\n") == 0)
-			return -1;
+    if (strcmp(buff, "/quit\n") == 0) {
+        return -1;
+    }
 
-		// Recv
-		int msg_size;
-		if (recv_next_message_size(sockfd, &msg_size) == -1) {
-			break;
-		}
-		if (recv_message(sockfd, buff, msg_size) == -1) {
-			break;
-		}
-		printf("Received: %.*s", msg_size, buff);
-	}
 	return 0;
 }
 
-void reply_server(int sockfd) {
+int reply_server(int sockfd) {
 	int msg_size;
 	if (recv_next_message_size(sockfd, &msg_size) < 0) {
 		printf("Server closed connection\n");
-		return;
+		return -1;
 	}
 	if (msg_size > 0) {
 		char *msg = malloc(msg_size);
 		if (recv_message(sockfd, msg, msg_size) < 0) {
 			printf("Server closed connection\n");
 			free(msg);
-			return;
+			return -1;
 		}
 		printf("Received from server: %.*s\n", msg_size, msg);
 		free(msg);
 	}
+    return 0;
 }
 int handle_connect(char *host, char *port) {
 	struct addrinfo hints, *result, *rp;
@@ -178,7 +170,10 @@ int main(int argc, char *argv[]) {
         if (fds[1].revents & POLLIN) {
             // Read from server
 			sleep(1);
-            reply_server(sfd);
+            if (reply_server(sfd) == -1) {
+                close(sfd);
+                return 0;
+            }
             fds[1].revents = 0;
         }
     }

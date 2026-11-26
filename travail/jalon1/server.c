@@ -80,7 +80,7 @@ int echo_server(int sockfd, int client_index) {
 	if (recv_message(sockfd, buff, msg_size) == -1) {
 		return -1;
 	}
-	printf("Received: %.*s", msg_size, buff);
+	printf("Received: %.*s\n", msg_size, buff);
 
 	if (strcmp(buff, "/quit\n") == 0) {
 		return -1;
