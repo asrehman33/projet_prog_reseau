@@ -8,7 +8,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "chained_list.h"
-#include "msg_struct.h"
 #include <ctype.h>
 
 #define BUFFER_SIZE 4096
@@ -115,18 +114,19 @@ static int valid_nickname(const char *infos, char *error, size_t error_size) {
     return 1;
 }
 
-static int nickname_is_used(const char *nickname, int client_index) {
+static int nickname_is_used(const char *nickname, int client_index, struct list *lst) {
     for (int i = 0; i < MAX_CNN; i++) {
-        struct node *client = get_node_by_index(index);
-        if (i != client_index && client->nicknames[0] != '\0' &&
-            strcmp(client->nicknames[i], nickname) == 0) {
+        struct node *client = get_node_by_index(lst, i);
+
+        if (client != NULL && i != client_index && client->nickname[0] != '\0' &&
+            strcmp(client->nickname, nickname) == 0) {
             return 1;
         }
     }
     return 0;
 }
 
-int handle_client_message(int sockfd, int client_index) {
+int handle_client_message(int sockfd, int client_index, struct list *lst) {
     struct message msg;
     char payload[BUFFER_SIZE];
 
@@ -146,8 +146,8 @@ int handle_client_message(int sockfd, int client_index) {
         reply.type = NICKNAME_NEW;
         reply.status = OK;
         reply.pld_len = 0;
-        struct node *client = get_node_by_index(client_index);
-        strncpy(reply.nick_sender, client->nicknames, NICK_LEN - 1);
+        struct node *client = get_node_by_index(lst, client_index);
+        strncpy(reply.nick_sender, client->nickname, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
         if (!valid_nickname(msg.infos, error, sizeof(error))) {
@@ -160,7 +160,7 @@ int handle_client_message(int sockfd, int client_index) {
             return 0;
         }
 
-        if (nickname_is_used(msg.infos, client_index)) {
+        if (nickname_is_used(msg.infos, client_index, lst)) {
             snprintf(reply.infos, INFOS_LEN, "Error: nickname already in use");
             reply.status = ERROR;
             if (send_protocol_message(sockfd, &reply, NULL) == -1) {
@@ -169,16 +169,16 @@ int handle_client_message(int sockfd, int client_index) {
             return 0;
         }
 
-        strncpy(client->nicknames, msg.infos, NICK_LEN - 1);
-        client->nicknames[NICK_LEN - 1] = '\0';
-        strncpy(reply.infos, client->nicknames, NICK_LEN - 1);
+        strncpy(client->nickname, msg.infos, NICK_LEN - 1);
+        client->nickname[NICK_LEN - 1] = '\0';
+        strncpy(reply.infos, client->nickname, NICK_LEN - 1);
         reply.infos[NICK_LEN - 1] = '\0';
         char nickname_server[NICK_LEN] = "Server";
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
         char payload[INFOS_LEN];
-        reply.pld_len = snprintf(payload, sizeof(payload), "Welcome on the chat %s", client->nicknames);
+        reply.pld_len = snprintf(payload, sizeof(payload), "Welcome on the chat %s", client->nickname);
 
         if (send_protocol_message(sockfd, &reply, payload) == -1) {
             return -1;
@@ -284,7 +284,7 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
                 print_list(lst);
                 fds[i].revents = 0;
             } else if ((fds[i].revents & POLLIN) && fds[i].fd != listen_df) {
-                if (handle_client_message(fds[i].fd, i) == -1) {
+                if (handle_client_message(fds[i].fd, i, lst) == -1) {
                     printf("Connection closed by client %d\n", i);
                     close(fds[i].fd);
                     remove_by_fd(lst, fds[i].fd);

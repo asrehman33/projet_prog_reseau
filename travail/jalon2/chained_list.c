@@ -7,10 +7,10 @@
 struct node *add_node(struct list *lst, int fd, int index, struct sockaddr_in addr) {
     struct node *new_node = malloc(sizeof(struct node));
     new_node->fd = fd;
-    new_node->fd = index;
+    new_node->index = index;
     new_node->addr = addr;
     new_node->next = NULL;
-    new_node->nicknames[0] = '\0';
+    new_node->nickname[0] = '\0';
 
     if (lst->head == NULL) {
         lst->head = new_node;

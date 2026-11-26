@@ -9,7 +9,7 @@ struct node {
     int index;
     struct sockaddr_in addr;
     struct node *next;
-    char nicknames[NICK_LEN];
+    char nickname[NICK_LEN];
 };
 
 struct list {
@@ -22,7 +22,7 @@ void remove_by_fd(struct list *lst, int fd);
 void free_list(struct list *lst);
 void print_list(struct list *lst);
 void print_node(struct node *node);
-struct node *get_node_by_index(int index);
+struct node *get_node_by_index(struct list *lst, int index);
 
 
 #endif
