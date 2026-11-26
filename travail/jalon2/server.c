@@ -129,16 +129,17 @@ static int nickname_is_used(const char *nickname, int client_index, struct list 
 
 int handle_client_message(int sockfd, int client_index, struct list *lst) {
     struct message msg;
-    char payload[BUFFER_SIZE];
+    char pld_recv[BUFFER_SIZE];
+    char pld_load[BUFFER_SIZE];
 
     memset(&msg, 0, sizeof(msg));
-    if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
+    if (recv_protocol_message(sockfd, &msg, pld_recv, sizeof(pld_recv)) == -1) {
         return -1;
     }
 
     printf("Client %d | type=%s (%d) | sender=%s | infos=%s | pld_len=%d | payload=%s\n",
            client_index, msg_type_str[msg.type], msg.type, msg.nick_sender,
-           msg.infos, msg.pld_len, payload);
+           msg.infos, msg.pld_len, pld_recv);
 
     if (msg.type == NICKNAME_NEW) {
         struct message reply;
@@ -178,10 +179,9 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
-        char payload[PROTO_MAX_PAYLOAD];
-        reply.pld_len = snprintf(payload, sizeof(payload), "Welcome on the chat %s", client->nickname);
+        reply.pld_len = snprintf(pld_load, sizeof(pld_load), "Welcome on the chat %s", client->nickname);
 
-        if (send_protocol_message(sockfd, &reply, payload) == -1) {
+        if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
             return -1;
         }
         return 0;
@@ -196,10 +196,9 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         reply.pld_len = 0;
 
         struct node *client = lst->head;
-        char payload[PROTO_MAX_PAYLOAD];
         size_t index = 0;
         while (client != NULL) {
-            reply.pld_len += snprintf(payload + index, sizeof(payload) - index, "- %s\n", client->nickname);
+            reply.pld_len += snprintf(pld_load + index, sizeof(pld_load) - index, "- %s\n", client->nickname);
             index = reply.pld_len;
             client = client->next;
         }
@@ -209,7 +208,7 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         reply.nick_sender[NICK_LEN - 1] = '\0';
         strncpy(reply.infos, "Online users are :\n", INFOS_LEN - 1);
 
-        if (send_protocol_message(sockfd, &reply, reply.pld_len > 0 ? payload : NULL) == -1) {
+        if (send_protocol_message(sockfd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
             return -1;
         }
         return 0;
@@ -221,7 +220,6 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         reply.type = NICKNAME_INFOS;
 
         struct node *client = find_client_by_nickname(msg.infos, lst);
-        char payload[PROTO_MAX_PAYLOAD];
         if (client != NULL) {
             struct tm connection_time;
             char connected_at[32];
@@ -236,12 +234,12 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
             }
 
             reply.status = OK;
-            reply.pld_len = snprintf(payload, sizeof(payload), "%s connected since %s with IP address %s and port number %d\n", client->nickname, connected_at, inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port));
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load), "%s connected since %s with IP address %s and port number %d\n", client->nickname, connected_at, inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port));
             strncpy(reply.infos, client->nickname, INFOS_LEN - 1);
             reply.infos[INFOS_LEN - 1] = '\0';
         } else {
             reply.status = ERROR;
-            reply.pld_len = snprintf(payload, sizeof(payload), "User not found\n");
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load), "User not found\n");
             strncpy(reply.infos, "User not found", INFOS_LEN - 1);
             reply.infos[INFOS_LEN - 1] = '\0';
         }
@@ -250,17 +248,43 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
-        if (send_protocol_message(sockfd, &reply, payload) == -1) {
+        if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
             return -1;
         }
         return 0;
     }
 
-    if (msg.type == ECHO_SEND && strcmp(payload, "/quit\n") == 0) {
+    if (msg.type == BROADCAST_SEND) {
+         memcpy(pld_load, pld_recv, (size_t)msg.pld_len + 1);
+
+        struct message reply;
+        printf("here\n");
+        memset(&reply, 0, sizeof(reply));
+        reply.type = BROADCAST_SEND;
+        reply.pld_len = msg.pld_len;
+
+        strncpy(reply.nick_sender, msg.nick_sender, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        struct node *current = lst->head;
+        while (current != NULL) {
+            if (send_protocol_message(current->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+                return -1;
+            }
+            current = current->next;
+        }
+
+        // if (send_protocol_message(sockfd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+        //     return -1;
+        // }
+        return 0;
+    }
+
+    if (msg.type == ECHO_SEND && strcmp(pld_recv, "/quit\n") == 0) {
         return -1;
     }
 
-    if (send_protocol_message(sockfd, &msg, msg.pld_len > 0 ? payload : NULL) == -1) {
+    if (send_protocol_message(sockfd, &msg, msg.pld_len > 0 ? pld_load : NULL) == -1) {
         return -1;
     }
 

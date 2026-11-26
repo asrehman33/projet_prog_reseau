@@ -195,7 +195,7 @@ int reply_server(int sockfd, char *nick) {
     }
 
     if (msg.type == BROADCAST_SEND) {
-        printf("[%s] %s", msg.nick_sender, payload);
+        printf("[%s] %s\n", msg.nick_sender, payload);
     }
     return 0;
 }
