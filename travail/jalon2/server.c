@@ -9,9 +9,12 @@
 #include <unistd.h>
 #include "chained_list.h"
 #include "msg_struct.h"
+#include <ctype.h>
 
 #define BUFFER_SIZE 4096
 #define MAX_CNN 20
+
+static char nicknames[MAX_CNN][NICK_LEN];
 
 int die(int ret_value, const char *msg) {
     if (ret_value < 0) {
@@ -24,7 +27,6 @@ int die(int ret_value, const char *msg) {
 int send_message(int sockfd, const void *buf, size_t len) {
     size_t bytes_sent = 0;
     const char *ptr = (const char *)buf;
-
     while (bytes_sent < len) {
         ssize_t ret = write(sockfd, ptr + bytes_sent, len - bytes_sent);
         if (ret < 0) {
@@ -42,7 +44,6 @@ int send_message(int sockfd, const void *buf, size_t len) {
 int recv_message(int sockfd, void *buf, size_t len) {
     size_t bytes_read = 0;
     char *ptr = (char *)buf;
-
     while (bytes_read < len) {
         ssize_t ret = read(sockfd, ptr + bytes_read, len - bytes_read);
         if (ret < 0) {
@@ -78,7 +79,6 @@ int recv_protocol_message(int sockfd, struct message *msg, char *payload, size_t
         perror("Invalid pld_len");
         return -1;
     }
-
     if (msg->pld_len > 0) {
         if (recv_message(sockfd, payload, (size_t)msg->pld_len) == -1) {
             return -1;
@@ -87,7 +87,43 @@ int recv_protocol_message(int sockfd, struct message *msg, char *payload, size_t
     } else {
         payload[0] = '\0';
     }
+    return 0;
+}
 
+static int valid_nickname(const char *infos, char *error, size_t error_size) {
+    const char *nul = memchr(infos, '\0', NICK_LEN);
+    if (nul == NULL) {
+        snprintf(error, error_size, "Error: nickname is not NUL-terminated");
+        return 0;
+    }
+
+    size_t len = (size_t)(nul - infos);
+    if (len == 0) {
+        snprintf(error, error_size, "Error: nickname cannot be empty");
+        return 0;
+    }
+    if (len > NICK_LEN - 1) {
+        snprintf(error, error_size, "Error: nickname exceeds 127 characters");
+        return 0;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)infos[i];
+        if (!isalnum(c)) {
+            snprintf(error, error_size, "Error: nickname must contain only ASCII letters and digits");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int nickname_is_used(const char *nickname, int client_index) {
+    for (int i = 0; i < MAX_CNN; i++) {
+        if (i != client_index && nicknames[i][0] != '\0' &&
+            strcmp(nicknames[i], nickname) == 0) {
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -101,13 +137,45 @@ int handle_client_message(int sockfd, int client_index) {
     }
 
     printf("Client %d | type=%s (%d) | sender=%s | infos=%s | pld_len=%d | payload=%s\n",
-           client_index,
-           msg_type_str[msg.type],
-           msg.type,
-           msg.nick_sender,
-           msg.infos,
-           msg.pld_len,
-           payload);
+           client_index, msg_type_str[msg.type], msg.type, msg.nick_sender,
+           msg.infos, msg.pld_len, payload);
+
+    if (msg.type == NICKNAME_NEW) {
+        struct message reply;
+        char error[INFOS_LEN];
+        memset(&reply, 0, sizeof(reply));
+        reply.type = NICKNAME_NEW;
+        reply.pld_len = 0;
+        strncpy(reply.nick_sender, nicknames[client_index], NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        if (!valid_nickname(msg.infos, error, sizeof(error))) {
+            strncpy(reply.infos, error, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            if (send_protocol_message(sockfd, &reply, NULL) == -1) {
+                return -1;
+            }
+            return 0;
+        }
+
+        if (nickname_is_used(msg.infos, client_index)) {
+            snprintf(reply.infos, INFOS_LEN, "Error: nickname already in use");
+            if (send_protocol_message(sockfd, &reply, NULL) == -1) {
+                return -1;
+            }
+            return 0;
+        }
+
+        strncpy(nicknames[client_index], msg.infos, NICK_LEN - 1);
+        nicknames[client_index][NICK_LEN - 1] = '\0';
+        strncpy(reply.nick_sender, nicknames[client_index], NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+        reply.infos[0] = '\0';
+        if (send_protocol_message(sockfd, &reply, NULL) == -1) {
+            return -1;
+        }
+        return 0;
+    }
 
     if (msg.type == ECHO_SEND && strcmp(payload, "/quit\n") == 0) {
         return -1;
@@ -170,7 +238,6 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
     fds[0].fd = listen_df;
     fds[0].events = POLLIN;
     fds[0].revents = 0;
-
     for (int i = 1; i < MAX_CNN; i++) {
         fds[i].fd = -1;
         fds[i].events = 0;
@@ -200,6 +267,7 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
                         fds[j].fd = new_fd;
                         fds[j].events = POLLIN;
                         fds[j].revents = 0;
+                        nicknames[j][0] = '\0';
                         struct node *node = add_node(lst, new_fd, client_addr);
                         print_node(node);
                         break;
@@ -210,6 +278,7 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
             } else if ((fds[i].revents & POLLIN) && fds[i].fd != listen_df) {
                 if (handle_client_message(fds[i].fd, i) == -1) {
                     printf("Connection closed by client %d\n", i);
+                    nicknames[i][0] = '\0';
                     close(fds[i].fd);
                     remove_by_fd(lst, fds[i].fd);
                     print_list(lst);
@@ -219,6 +288,7 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
                 fds[i].revents = 0;
             } else if ((fds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) && fds[i].fd != listen_df) {
                 printf("Connection closed/error on client %d\n", i);
+                nicknames[i][0] = '\0';
                 remove_by_fd(lst, fds[i].fd);
                 print_list(lst);
                 close(fds[i].fd);
@@ -245,7 +315,6 @@ int main(int argc, char *argv[]) {
     }
 
     struct list lst = {0};
-
     handle_multiple_connection(sfd, &lst);
     close(sfd);
     return EXIT_SUCCESS;
