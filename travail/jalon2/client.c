@@ -19,106 +19,130 @@ int die(int ret_value, char *msg) {
     return 0;
 }
 
-int send_next_message_size(int sockfd, int msg_size) {
-    int bytes_sent = 0;
-    int ret;
-    while (bytes_sent != sizeof(msg_size)) {
-        ret = write(sockfd, ((char *)&msg_size) + bytes_sent, sizeof(msg_size) - bytes_sent);
-        die(ret, "On writing message size");
-        bytes_sent += ret;
-    }
-    return 0;
-}
+int send_message(int sockfd, const void *buf, size_t len) {
+    size_t bytes_sent = 0;
+    const char *ptr = (const char *)buf;
 
-int send_message(int sockfd, char *msg, int msg_size) {
-    int bytes_sent = 0;
-    int ret;
-    while (bytes_sent != msg_size) {
-        ret = write(sockfd, msg + bytes_sent, msg_size - bytes_sent);
-        die(ret, "On writing");
-        bytes_sent += ret;
-    }
-    return 0;
-}
-
-int recv_next_message_size(int sockfd, int *msg_size) {
-    int bytes_read = 0;
-    int ret;
-    while (bytes_read != sizeof(int)) {
-        ret = read(sockfd, ((char *)msg_size) + bytes_read, sizeof(int) - bytes_read);
-        die(ret, "On reading message size");
+    while (bytes_sent < len) {
+        ssize_t ret = write(sockfd, ptr + bytes_sent, len - bytes_sent);
+        if (ret < 0) {
+            perror("On writing");
+            return -1;
+        }
         if (ret == 0) {
             return -1;
         }
-        bytes_read += ret;
+        bytes_sent += (size_t)ret;
     }
     return 0;
 }
 
-int recv_message(int sockfd, char *msg, int msg_size) {
-    int bytes_read = 0;
-    int ret;
-    while (bytes_read != msg_size) {
-        ret = read(sockfd, msg + bytes_read, msg_size - bytes_read);
-        die(ret, "On reading");
+int recv_message(int sockfd, void *buf, size_t len) {
+    size_t bytes_read = 0;
+    char *ptr = (char *)buf;
+
+    while (bytes_read < len) {
+        ssize_t ret = read(sockfd, ptr + bytes_read, len - bytes_read);
+        if (ret < 0) {
+            perror("On reading");
+            return -1;
+        }
         if (ret == 0) {
             return -1;
         }
-        bytes_read += ret;
+        bytes_read += (size_t)ret;
     }
+    return 0;
+}
+
+int send_protocol_message(int sockfd, const struct message *msg, const char *payload) {
+    if (send_message(sockfd, msg, sizeof(struct message)) == -1) {
+        return -1;
+    }
+    if (msg->pld_len > 0 && payload != NULL) {
+        if (send_message(sockfd, payload, (size_t)msg->pld_len) == -1) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int recv_protocol_message(int sockfd, struct message *msg, char *payload, size_t max_payload_len) {
+    if (recv_message(sockfd, msg, sizeof(struct message)) == -1) {
+        return -1;
+    }
+
+    if (msg->pld_len < 0 || (size_t)msg->pld_len >= max_payload_len) {
+        perror("Invalid pld_len");
+        return -1;
+    }
+
+    if (msg->pld_len > 0) {
+        if (recv_message(sockfd, payload, (size_t)msg->pld_len) == -1) {
+            return -1;
+        }
+        payload[msg->pld_len] = '\0';
+    } else {
+        payload[0] = '\0';
+    }
+
     return 0;
 }
 
 int echo_client(int sockfd) {
-	char buff[BUFFER_SIZE];
-	while (1) {
+    char buff[BUFFER_SIZE];
+    memset(buff, 0, BUFFER_SIZE);
+    if (read(STDIN_FILENO, buff, BUFFER_SIZE - 1) <= 0) {
+        return -1;
+    }
 
-		// Send
-        struct message msg_send;
-        int msg_len = sizeof(msg_send);
-        // Send Message Format
-		send_message(sockfd, (char *)&msg_send, msg_len);
+    if (strcmp(buff, "/quit\n") == 0) {
+        return -1;
+  // Send
+    struct message msg_send;
+    int msg_len = sizeof(msg_send);
+    // Send Message Format
+    send_message(sockfd, (char *)&msg_send, msg_len);
 
-        // Send Payload Format
-        memset(buff, 0, BUFFER_SIZE);
-		read(STDIN_FILENO, buff, BUFFER_SIZE);
+    // Send Payload Format
+    memset(buff, 0, BUFFER_SIZE);
+    read(STDIN_FILENO, buff, BUFFER_SIZE);
 
-		send_next_message_size(sockfd, msg_send.pld_len);
-		send_message(sockfd, buff, msg_send.pld_len);
+    send_message(sockfd, buff, msg_send.pld_len);
 
-		printf("Send: %s", buff);
-		if (strcmp(buff, "/quit\n") == 0)
-			return -1;
+    printf("Send: %s", buff);
+    if (strcmp(buff, "/quit\n") == 0)
+        return -1;    }
 
-		// Recv
-		int msg_size;
-		if (recv_next_message_size(sockfd, &msg_size) == -1) {
-			break;
-		}
-		if (recv_message(sockfd, buff, msg_size) == -1) {
-			break;
-		}
-		printf("Received: %.*s", msg_size, buff);
-	}
-	return 0;
+    if (strncmp(buff, "/nick ", 6) != 0) {
+        printf("Usage: /nick <pseudo>\n");
+        return 0;
+    }
+
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = NICKNAME_NEW;
+    msg.pld_len = 0;
+    char *nick = buff + 6;
+    nick[strcspn(nick, "\n")] = '\0';
+    strncpy(msg.infos, nick, INFOS_LEN - 1);
+
+    if (send_protocol_message(sockfd, &msg, NULL) == -1) {
+        return -1;
+    }
+    printf("Send: %s %s\n", msg_type_str[msg.type], msg.infos);
+    return 0;
 }
 
 void reply_server(int sockfd) {
-	int msg_size;
-	if (recv_next_message_size(sockfd, &msg_size) < 0) {
-		printf("Server closed connection\n");
-		return;
-	}
-	if (msg_size > 0) {
-		char *msg = malloc(msg_size);
-		if (recv_message(sockfd, msg, msg_size) < 0) {
-			printf("Server closed connection\n");
-			free(msg);
-			return;
-		}
-		printf("Received from server: %.*s\n", msg_size, msg);
-		free(msg);
-	}
+    struct message msg;
+    char payload[BUFFER_SIZE];
+    if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
+        printf("Server closed connection\n");
+        return;
+    }
+    printf("Received from server: %s | infos=%s | payload=%s\n",
+           msg_type_str[msg.type], msg.infos, payload);
 }
 int handle_connect(char *host, char *port) {
 	struct addrinfo hints, *result, *rp;
