@@ -121,6 +121,7 @@ int echo_client(int sockfd, const char *nick) {
     memset(&msg, 0, sizeof(msg));
     strncpy(msg.nick_sender, nick, NICK_LEN - 1); // Copy the current nickname into the message sender field
     char *payload = "";
+    int command_found = 0;
 
     if (strncmp(buff, "/nick ", 6) == 0) {
         char *new_nick = buff + 6;
@@ -130,6 +131,7 @@ int echo_client(int sockfd, const char *nick) {
             return 0;
         }
         msg.type = NICKNAME_NEW;
+        command_found = 1;
         strncpy(msg.infos, new_nick, INFOS_LEN - 1); // Copy the new nickname into the message infos field
     } else {
         if (nick[0] == '\0' && msg.nick_sender[0] == '\0') {
@@ -140,12 +142,14 @@ int echo_client(int sockfd, const char *nick) {
         if (strncmp(buff, "/who", 4) == 0) {
             // NICKNAME_LIST logic here
             msg.type = NICKNAME_LIST;
+            command_found = 1;
         }
 
         if (strncmp(buff, "/whois ", 7) == 0) {
             char *whois_nick = buff + 7;
             whois_nick[strcspn(whois_nick, "\n")] = '\0';
             msg.type = NICKNAME_INFOS;
+            command_found = 1;
             strncpy(msg.infos, whois_nick, INFOS_LEN - 1);
         }
 
@@ -153,6 +157,7 @@ int echo_client(int sockfd, const char *nick) {
             char *msgall_payload = buff + 8;
             msgall_payload[strcspn(msgall_payload, "\n")] = '\0';
             msg.type = BROADCAST_SEND;
+            command_found = 1;
             msg.pld_len = strlen(msgall_payload);
             payload = msgall_payload;
         }
@@ -168,10 +173,16 @@ int echo_client(int sockfd, const char *nick) {
             *msg_payload = '\0';
             msg_payload++;
             msg.type = UNICAST_SEND;
+            command_found = 1;
             strncpy(msg.infos, dest, INFOS_LEN - 1);
             msg.pld_len = strlen(msg_payload);
             payload = msg_payload;
         }
+    }
+
+    if (!command_found) {
+        fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall or /msg.\n");
+        return 0;
     }
 
     if (send_protocol_message(sockfd, &msg, payload) == -1) {  
@@ -215,7 +226,11 @@ int reply_server(int sockfd, char *nick) {
     }
 
     if (msg.type == UNICAST_SEND) {
-        printf("[%s] (privé) %s\n", msg.nick_sender, payload);
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] (privé) %s\n", msg.nick_sender, payload);
+        }
     }
     return 0;
 }

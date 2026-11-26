@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
@@ -132,6 +133,8 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
     char pld_recv[BUFFER_SIZE];
     char pld_load[BUFFER_SIZE];
 
+    char nickname_server[NICK_LEN] = "Server";
+
     memset(&msg, 0, sizeof(msg));
     if (recv_protocol_message(sockfd, &msg, pld_recv, sizeof(pld_recv)) == -1) {
         return -1;
@@ -151,6 +154,15 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         struct node *client = get_node_by_index(lst, client_index);
         strncpy(reply.nick_sender, client->nickname, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        if (strcasecmp(msg.infos, nickname_server) == 0) {
+            snprintf(reply.infos, INFOS_LEN, "Error: nickname is reserved");
+            reply.status = ERROR;
+            if (send_protocol_message(sockfd, &reply, NULL) == -1) {
+                return -1;
+            }
+            return 0;
+        }
 
         if (!valid_nickname(msg.infos, error, sizeof(error))) {
             strncpy(reply.infos, error, INFOS_LEN - 1);
@@ -175,7 +187,6 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         client->nickname[NICK_LEN - 1] = '\0';
         strncpy(reply.infos, client->nickname, NICK_LEN - 1);
         reply.infos[NICK_LEN - 1] = '\0';
-        char nickname_server[NICK_LEN] = "Server";
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
@@ -203,7 +214,6 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
             client = client->next;
         }
 
-        char nickname_server[NICK_LEN] = "Server";
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
         strncpy(reply.infos, "Online users are :\n", INFOS_LEN - 1);
@@ -244,7 +254,6 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
             reply.infos[INFOS_LEN - 1] = '\0';
         }
 
-        char nickname_server[NICK_LEN] = "Server";
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
@@ -255,14 +264,19 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
     }
 
     if (msg.type == BROADCAST_SEND) {
-         memcpy(pld_load, pld_recv, (size_t)msg.pld_len + 1);
+        struct node *sender = get_node_by_index(lst, client_index);
+        if (sender == NULL) {
+            return -1;
+        }
+        strncpy(pld_load, pld_recv, (size_t)msg.pld_len);
+        pld_load[msg.pld_len] = '\0';
 
         struct message reply;
         memset(&reply, 0, sizeof(reply));
         reply.type = BROADCAST_SEND;
         reply.pld_len = msg.pld_len;
 
-        strncpy(reply.nick_sender, msg.nick_sender, NICK_LEN - 1);
+        strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
         struct node *current = lst->head;
@@ -278,6 +292,10 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
     }
 
     if (msg.type == UNICAST_SEND) {
+        struct node *sender = get_node_by_index(lst, client_index);
+        if (sender == NULL) {
+            return -1;
+        }
         struct node *dest = find_client_by_nickname(msg.infos, lst);
         memcpy(pld_load, pld_recv, (size_t)msg.pld_len);
 
@@ -285,20 +303,26 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         memset(&reply, 0, sizeof(reply));
         reply.type = UNICAST_SEND;
         reply.pld_len = msg.pld_len;
+        reply.status = OK;
 
-        strncpy(reply.nick_sender, msg.nick_sender, NICK_LEN - 1);
+        strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
         if (dest != NULL) {
             if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
                 return -1;
             }
+        } else {
+            reply.status = ERROR;
+            strncpy(reply.infos, msg.infos, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                     "User '%s' not found", msg.infos);
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
         }
         return 0;
-    }
-
-    if (msg.type == ECHO_SEND && strcmp(pld_recv, "/quit\n") == 0) {
-        return -1;
     }
 
     if (send_protocol_message(sockfd, &msg, msg.pld_len > 0 ? pld_load : NULL) == -1) {
