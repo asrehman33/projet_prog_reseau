@@ -31,7 +31,6 @@ struct message {
 	enum msg_type type;
 	enum msg_status status;
 	char infos[INFOS_LEN];
-	enum msg_status status;
 };
 
 static char* msg_type_str[] = {

@@ -171,9 +171,10 @@ int handle_client_message(int sockfd, int client_index) {
 
         strncpy(nicknames[client_index], msg.infos, NICK_LEN - 1);
         nicknames[client_index][NICK_LEN - 1] = '\0';
-        strncpy(reply.nick_sender, nicknames[client_index], NICK_LEN - 1);
-        reply.nick_sender[NICK_LEN - 1] = '\0';
-        reply.infos[0] = '\0';
+        strncpy(reply.infos, nicknames[client_index], NICK_LEN - 1);
+        reply.infos[NICK_LEN - 1] = '\0';
+        reply.nick_sender[0] = '\0';
+
         if (send_protocol_message(sockfd, &reply, NULL) == -1) {
             return -1;
         }
