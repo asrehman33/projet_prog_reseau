@@ -119,6 +119,8 @@ int echo_client(int sockfd, const char *nick) {
 
     struct message msg;
     memset(&msg, 0, sizeof(msg));
+    strncpy(msg.nick_sender, nick, NICK_LEN - 1); // Copy the current nickname into the message sender field
+    char *payload = "";
 
     if (strncmp(buff, "/nick ", 6) == 0) {
         char *new_nick = buff + 6;
@@ -128,18 +130,30 @@ int echo_client(int sockfd, const char *nick) {
             return 0;
         }
         msg.type = NICKNAME_NEW;
-        strncpy(msg.infos, new_nick, INFOS_LEN - 1);
+        strncpy(msg.infos, new_nick, INFOS_LEN - 1); // Copy the new nickname into the message infos field
     } else {
         if (nick[0] == '\0' && msg.nick_sender[0] == '\0') {
             fprintf(stderr, "Nickname not set.\n Use /nick <nickname> to set it.\n");
             return 0;
         }
+
+        if (strncmp(buff, "/who", 4) == 0) {
+            // NICKNAME_LIST logic here
+            msg.type = NICKNAME_LIST;
+        }
+
+        if (strncmp(buff, "/whois ", 7) == 0) {
+            char *whois_nick = buff + 7;
+            whois_nick[strcspn(whois_nick, "\n")] = '\0';
+            msg.type = NICKNAME_INFOS;
+            strncpy(msg.infos, whois_nick, INFOS_LEN - 1);
+        }
     }
 
-    if (send_protocol_message(sockfd, &msg, NULL) == -1) {  
+    if (send_protocol_message(sockfd, &msg, payload) == -1) {  
         return 0;
     }
-    // printf("Send: %s %s\n", msg_type_str[msg.type], msg.infos);
+    printf("Send: %s %s\n", msg_type_str[msg.type], msg.infos);
     return 0;
 }
 
