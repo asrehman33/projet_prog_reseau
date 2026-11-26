@@ -145,6 +145,7 @@ int handle_client_message(int sockfd, int client_index) {
         char error[INFOS_LEN];
         memset(&reply, 0, sizeof(reply));
         reply.type = NICKNAME_NEW;
+        reply.status = OK;
         reply.pld_len = 0;
         strncpy(reply.nick_sender, nicknames[client_index], NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
@@ -152,6 +153,7 @@ int handle_client_message(int sockfd, int client_index) {
         if (!valid_nickname(msg.infos, error, sizeof(error))) {
             strncpy(reply.infos, error, INFOS_LEN - 1);
             reply.infos[INFOS_LEN - 1] = '\0';
+            reply.status = ERROR;
             if (send_protocol_message(sockfd, &reply, NULL) == -1) {
                 return -1;
             }
@@ -160,6 +162,7 @@ int handle_client_message(int sockfd, int client_index) {
 
         if (nickname_is_used(msg.infos, client_index)) {
             snprintf(reply.infos, INFOS_LEN, "Error: nickname already in use");
+            reply.status = ERROR;
             if (send_protocol_message(sockfd, &reply, NULL) == -1) {
                 return -1;
             }

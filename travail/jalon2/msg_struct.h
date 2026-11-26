@@ -20,11 +20,17 @@ enum msg_type {
 	FILE_ACK
 };
 
+enum msg_status {
+	OK,
+	ERROR
+};
+
 struct message {
 	int pld_len;
 	char nick_sender[NICK_LEN];
 	enum msg_type type;
 	char infos[INFOS_LEN];
+	enum msg_status status;
 };
 
 static char* msg_type_str[] = {
