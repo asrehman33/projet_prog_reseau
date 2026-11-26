@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include "chained_list.h"
+#include "msg_struct.h"
 
 #define BUFFER_SIZE 1024
 #define MAX_CNN 20
