@@ -133,7 +133,7 @@ int echo_client(int sockfd, const char *nick) {
         strncpy(msg.infos, new_nick, INFOS_LEN - 1); // Copy the new nickname into the message infos field
     } else {
         if (nick[0] == '\0' && msg.nick_sender[0] == '\0') {
-            fprintf(stderr, "Nickname not set.\n Use /nick <nickname> to set it.\n");
+            fprintf(stderr, "Nickname not set.\nUse /nick <nickname> to set it.\n");
             return 0;
         }
 
@@ -147,6 +147,14 @@ int echo_client(int sockfd, const char *nick) {
             whois_nick[strcspn(whois_nick, "\n")] = '\0';
             msg.type = NICKNAME_INFOS;
             strncpy(msg.infos, whois_nick, INFOS_LEN - 1);
+        }
+
+        if (strncmp(buff, "/msgall ", 8) == 0) {
+            char *msgall_payload = buff + 8;
+            msgall_payload[strcspn(msgall_payload, "\n")] = '\0';
+            msg.type = BROADCAST_SEND;
+            msg.pld_len = strlen(msgall_payload);
+            payload = msgall_payload;
         }
     }
 
@@ -183,6 +191,10 @@ int reply_server(int sockfd, char *nick) {
     }
 
     if (msg.type == NICKNAME_INFOS) {
+        printf("[%s] %s", msg.nick_sender, payload);
+    }
+
+    if (msg.type == BROADCAST_SEND) {
         printf("[%s] %s", msg.nick_sender, payload);
     }
     return 0;
