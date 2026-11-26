@@ -172,7 +172,13 @@ int reply_server(int sockfd, char *nick) {
         else {
             strncpy(nick, msg.infos, NICK_LEN - 1);
             nick[NICK_LEN - 1] = '\0';
-            printf("[%s] %s %s\n", msg.nick_sender, payload, msg.infos);
+            printf("[%s] %s\n", msg.nick_sender, payload);
+        }
+    }
+
+    if (msg.type == NICKNAME_LIST) {
+        if (msg.status == OK) {
+            printf("[%s] %s%s", msg.nick_sender, msg.infos, payload);
         }
     }
     return 0;
