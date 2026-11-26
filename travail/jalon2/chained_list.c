@@ -1,16 +1,18 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <arpa/inet.h>
 #include "chained_list.h"
 
-struct node *add_node(struct list *lst, int fd, int index, struct sockaddr_in addr) {
+struct node *add_node(struct list *lst, int fd, int index, struct sockaddr_in addr, time_t connected_at) {
     struct node *new_node = malloc(sizeof(struct node));
     new_node->fd = fd;
     new_node->index = index;
     new_node->addr = addr;
     new_node->next = NULL;
     new_node->nickname[0] = '\0';
+    new_node->connected_at = connected_at;
 
     if (lst->head == NULL) {
         lst->head = new_node;
@@ -88,5 +90,16 @@ struct node *get_node_by_index(struct list *lst, int index) {
         current = current->next;
     }
 
+    return NULL;
+}
+
+struct node *find_client_by_nickname(char *nickname, struct list *lst) {
+    struct node *current = lst->head;
+    while (current != NULL) {
+        if (strcmp(current->nickname, nickname) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
     return NULL;
 }

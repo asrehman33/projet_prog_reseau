@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 #include "chained_list.h"
 #include <ctype.h>
@@ -214,6 +215,47 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         return 0;
     }
 
+    if (msg.type == NICKNAME_INFOS) {
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = NICKNAME_INFOS;
+
+        struct node *client = find_client_by_nickname(msg.infos, lst);
+        char payload[PROTO_MAX_PAYLOAD];
+        if (client != NULL) {
+            struct tm connection_time;
+            char connected_at[32];
+            if (localtime_r(&client->connected_at, &connection_time) == NULL) {
+                perror("localtime_r");
+                return -1;
+            }
+            if (strftime(connected_at, sizeof(connected_at), "%Y/%m/%d@%H:%M",
+                         &connection_time) == 0) {
+                fprintf(stderr, "Could not format client connection time\n");
+                return -1;
+            }
+
+            reply.status = OK;
+            reply.pld_len = snprintf(payload, sizeof(payload), "%s connected since %s with IP address %s and port number %d\n", client->nickname, connected_at, inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port));
+            strncpy(reply.infos, client->nickname, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+        } else {
+            reply.status = ERROR;
+            reply.pld_len = snprintf(payload, sizeof(payload), "User not found\n");
+            strncpy(reply.infos, "User not found", INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+        }
+
+        char nickname_server[NICK_LEN] = "Server";
+        strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        if (send_protocol_message(sockfd, &reply, payload) == -1) {
+            return -1;
+        }
+        return 0;
+    }
+
     if (msg.type == ECHO_SEND && strcmp(payload, "/quit\n") == 0) {
         return -1;
     }
@@ -298,13 +340,14 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
                     continue;
                 }
                 printf("New connection accepted\n");
+                time_t now = time(NULL);
 
                 for (int j = 1; j < MAX_CNN; j++) {
                     if (fds[j].fd == -1) {
                         fds[j].fd = new_fd;
                         fds[j].events = POLLIN;
                         fds[j].revents = 0;
-                        struct node *node = add_node(lst, new_fd, j, client_addr);
+                        struct node *node = add_node(lst, new_fd, j, client_addr, now);
                         print_node(node);
                         break;
                     }
