@@ -177,10 +177,38 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0';
 
-        char payload[INFOS_LEN];
+        char payload[PROTO_MAX_PAYLOAD];
         reply.pld_len = snprintf(payload, sizeof(payload), "Welcome on the chat %s", client->nickname);
 
         if (send_protocol_message(sockfd, &reply, payload) == -1) {
+            return -1;
+        }
+        return 0;
+    }
+
+    if (msg.type == NICKNAME_LIST) {
+        // Send the list of nicknames to the client
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = NICKNAME_LIST;
+        reply.status = OK;
+        reply.pld_len = 0;
+
+        struct node *client = lst->head;
+        char payload[PROTO_MAX_PAYLOAD];
+        size_t index = 0;
+        while (client != NULL) {
+            reply.pld_len += snprintf(payload + index, sizeof(payload) - index, "- %s\n", client->nickname);
+            index = reply.pld_len;
+            client = client->next;
+        }
+
+        char nickname_server[NICK_LEN] = "Server";
+        strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+        strncpy(reply.infos, "Online users are :\n", INFOS_LEN - 1);
+
+        if (send_protocol_message(sockfd, &reply, reply.pld_len > 0 ? payload : NULL) == -1) {
             return -1;
         }
         return 0;
