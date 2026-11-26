@@ -181,8 +181,14 @@ int echo_client(int sockfd, const char *nick) {
     }
 
     if (!command_found) {
-        fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall or /msg.\n");
-        return 0;
+        if (buff[0] == '/') {
+            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall or /msg.\n");
+            return 0;
+        }
+        msg.type = ECHO_SEND;
+        command_found = 1;
+        msg.pld_len = strlen(buff);
+        payload = buff;
     }
 
     if (send_protocol_message(sockfd, &msg, payload) == -1) {  
@@ -213,11 +219,15 @@ int reply_server(int sockfd, char *nick) {
 
     if (msg.type == NICKNAME_LIST) {
         if (msg.status == OK) {
-            printf("[%s] %s%s", msg.nick_sender, msg.infos, payload);
+            printf("[%s] Online users are:\n%s", msg.nick_sender, payload);
         }
     }
 
     if (msg.type == NICKNAME_INFOS) {
+        printf("[%s] %s", msg.nick_sender, payload);
+    }
+
+    if (msg.type == ECHO_SEND) {
         printf("[%s] %s", msg.nick_sender, payload);
     }
 
