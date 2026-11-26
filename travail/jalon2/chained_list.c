@@ -2,22 +2,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <arpa/inet.h>
+#include "chained_list.h"
 
-struct node {
-    int fd;
-    struct sockaddr_in addr;
-    struct node *next;
-};
-
-struct list {
-    struct node *head;
-};
-
-struct node *add_node(struct list *lst, int fd, struct sockaddr_in addr) {
+struct node *add_node(struct list *lst, int fd, int index, struct sockaddr_in addr) {
     struct node *new_node = malloc(sizeof(struct node));
     new_node->fd = fd;
+    new_node->fd = index;
     new_node->addr = addr;
     new_node->next = NULL;
+    new_node->nicknames[0] = '\0';
 
     if (lst->head == NULL) {
         lst->head = new_node;
@@ -83,4 +76,17 @@ void print_node(struct node *node) {
         return;
     }
     printf("fd: %d | %s:%d\n", node->fd, inet_ntoa(node->addr.sin_addr), ntohs(node->addr.sin_port));
+}
+
+struct node *get_node_by_index(struct list *lst, int index) {
+    struct node *current = lst->head;
+
+    while (current != NULL) {
+        if (current->index == index) {
+            return current;
+        }
+        current = current->next;
+    }
+
+    return NULL;
 }
