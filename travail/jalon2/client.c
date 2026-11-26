@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include "msg_struct.h"
+#include <ctype.h>
 
 #define BUFFER_SIZE 1024
 
@@ -89,6 +90,21 @@ int recv_protocol_message(int sockfd, struct message *msg, char *payload, size_t
     return 0;
 }
 
+int verify_nickname(const char *nick) {
+    int nick_len = strlen(nick);
+    if (nick_len >= NICK_LEN) {
+        fprintf(stderr, "Nickname too long\n");
+        return -1;
+    }
+
+    for (int i = 0; i < nick_len; i++) {
+        if (!isalnum(nick[i])) {
+            fprintf(stderr, "Nickname contains invalid characters\n");
+            return -1;
+        }
+    }
+    return 0;
+}
 int echo_client(int sockfd) {
     char buff[BUFFER_SIZE];
     memset(buff, 0, BUFFER_SIZE);
@@ -98,51 +114,42 @@ int echo_client(int sockfd) {
 
     if (strcmp(buff, "/quit\n") == 0) {
         return -1;
-  // Send
-    struct message msg_send;
-    int msg_len = sizeof(msg_send);
-    // Send Message Format
-    send_message(sockfd, (char *)&msg_send, msg_len);
-
-    // Send Payload Format
-    memset(buff, 0, BUFFER_SIZE);
-    read(STDIN_FILENO, buff, BUFFER_SIZE);
-
-    send_message(sockfd, buff, msg_send.pld_len);
-
-    printf("Send: %s", buff);
-    if (strcmp(buff, "/quit\n") == 0)
-        return -1;    }
-
-    if (strncmp(buff, "/nick ", 6) != 0) {
-        printf("Usage: /nick <pseudo>\n");
-        return 0;
     }
 
     struct message msg;
     memset(&msg, 0, sizeof(msg));
-    msg.type = NICKNAME_NEW;
-    msg.pld_len = 0;
-    char *nick = buff + 6;
-    nick[strcspn(nick, "\n")] = '\0';
-    strncpy(msg.infos, nick, INFOS_LEN - 1);
 
-    if (send_protocol_message(sockfd, &msg, NULL) == -1) {
-        return -1;
+    if (strncmp(buff, "/nick ", 6) == 0) {
+        // NICKNAME_NEW logic here
+
+        msg.type = NICKNAME_NEW;
+        msg.pld_len = 0;
+        char *nick = buff + 6; // Skip the "/nick " part of the input
+        nick[strcspn(nick, "\n")] = '\0';
+        if (verify_nickname(nick) == -1) {
+            // We don't want the program to stop
+            return 0;
+        }
+        strncpy(msg.infos, nick, INFOS_LEN - 1);
+    }
+
+    if (send_protocol_message(sockfd, &msg, NULL) == -1) {  
+        return 0;
     }
     printf("Send: %s %s\n", msg_type_str[msg.type], msg.infos);
     return 0;
 }
 
-void reply_server(int sockfd) {
+int reply_server(int sockfd) {
     struct message msg;
     char payload[BUFFER_SIZE];
     if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
         printf("Server closed connection\n");
-        return;
+        return -1;
     }
     printf("Received from server: %s | infos=%s | payload=%s\n",
            msg_type_str[msg.type], msg.infos, payload);
+    return 0;
 }
 int handle_connect(char *host, char *port) {
 	struct addrinfo hints, *result, *rp;
@@ -203,14 +210,17 @@ int main(int argc, char *argv[]) {
             // Read from stdin
             if (echo_client(sfd) == -1) {
                 close(sfd);
-                return 0;
+                return -1;
             }
             fds[0].revents = 0;
         }
         if (fds[1].revents & POLLIN) {
             // Read from server
 			sleep(1);
-            reply_server(sfd);
+            if (reply_server(sfd) == -1) {
+                close(sfd);
+                return -1;
+            }
             fds[1].revents = 0;
         }
     }
