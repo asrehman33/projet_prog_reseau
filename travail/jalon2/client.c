@@ -105,7 +105,7 @@ int verify_nickname(const char *nick) {
     }
     return 0;
 }
-int echo_client(int sockfd) {
+int echo_client(int sockfd, const char *nick) {
     char buff[BUFFER_SIZE];
     memset(buff, 0, BUFFER_SIZE);
     if (read(STDIN_FILENO, buff, BUFFER_SIZE - 1) <= 0) {
@@ -113,6 +113,7 @@ int echo_client(int sockfd) {
     }
 
     if (strcmp(buff, "/quit\n") == 0) {
+        // QUIT logic here
         return -1;
     }
 
@@ -133,6 +134,11 @@ int echo_client(int sockfd) {
         strncpy(msg.infos, nick, INFOS_LEN - 1);
     }
 
+    if (strcmp(nick, "") == 0 && msg.type != NICKNAME_NEW) {
+        fprintf(stderr, "Nickname not set.\n Use /nick <nickname> to set it.\n");
+        return 0;
+    }
+
     if (send_protocol_message(sockfd, &msg, NULL) == -1) {  
         return 0;
     }
@@ -140,15 +146,26 @@ int echo_client(int sockfd) {
     return 0;
 }
 
-int reply_server(int sockfd) {
+int reply_server(int sockfd, char *nick) {
     struct message msg;
     char payload[BUFFER_SIZE];
     if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
         printf("Server closed connection\n");
         return -1;
     }
-    printf("Received from server: %s | infos=%s | payload=%s\n",
-           msg_type_str[msg.type], msg.infos, payload);
+
+    if (msg.type == NICKNAME_NEW) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", msg.infos);
+        }
+        else {
+            strncpy(nick, msg.infos, NICK_LEN - 1);
+            nick[NICK_LEN - 1] = '\0';
+            printf("Nickname set to: %s\n", nick);
+        }
+    }
+    // printf("Received from server: %s | infos=%s | payload=%s\n",
+    //        msg_type_str[msg.type], msg.infos, payload);
     return 0;
 }
 int handle_connect(char *host, char *port) {
@@ -199,6 +216,8 @@ int main(int argc, char *argv[]) {
     fds[1].events = POLLIN;
     fds[1].revents = 0;
 
+    char nick[NICK_LEN] = "";
+
 	while (1) {
         int nfds = poll(fds, 2, -1);
         if (nfds < 0) {
@@ -208,7 +227,7 @@ int main(int argc, char *argv[]) {
         }
         if (fds[0].revents & POLLIN) {
             // Read from stdin
-            if (echo_client(sfd) == -1) {
+            if (echo_client(sfd, nick) == -1) {
                 close(sfd);
                 return -1;
             }
@@ -217,7 +236,7 @@ int main(int argc, char *argv[]) {
         if (fds[1].revents & POLLIN) {
             // Read from server
 			sleep(1);
-            if (reply_server(sfd) == -1) {
+            if (reply_server(sfd, nick) == -1) {
                 close(sfd);
                 return -1;
             }
