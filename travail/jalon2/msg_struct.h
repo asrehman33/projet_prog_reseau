@@ -29,6 +29,7 @@ struct message {
 	int pld_len;
 	char nick_sender[NICK_LEN];
 	enum msg_type type;
+	enum msg_status status;
 	char infos[INFOS_LEN];
 	enum msg_status status;
 };
