@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>jalon1</title>
+  <style>
+    html {
+      line-height: 1.5;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 1em;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, 'Lucida Console', Consolas, monospace;
+      font-size: 85%;
+      margin: 0;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<h1 id="jalon-1-clientserveur-tcp-et-serveur-multi-clients">Jalon 1 —
+Client/serveur TCP et serveur multi-clients</h1>
+<blockquote>
+<p>Prérequis : lisez les règles de dépôt, soumission et évaluation dans
+le <a href="README.md">README</a>. À la fin du jalon, soumettez une
+release <code>jalon1</code> contenant votre code dans
+<code>travail/</code>.</p>
+</blockquote>
+<h2 id="objectif">Objectif</h2>
+<p>Implémentez un modèle client/serveur TCP en IPv4. Le client envoie
+une chaîne saisie au clavier, le serveur la renvoie uniquement à ce même
+client. Le serveur doit gérer plusieurs clients simultanément avec un
+unique processus et <code>poll()</code>.</p>
+<h2 id="fonctionnement-attendu">Fonctionnement attendu</h2>
+<p>Le client crée une socket TCP avec le nom de domaine et le port
+fournis, puis se connecte au serveur. Le serveur crée une socket
+d’écoute, l’associe à un port, accepte les connexions, reçoit les
+données et répond aux clients.</p>
+<p>Le client doit surveiller simultanément son entrée standard et sa
+socket avec la fonction poll car il peut a tout moment recevoir des
+données depuis STDIN (descripteur de fichier qui vaut 0 par défaut)
+envoyées par l’utilisateur ou des données depuis sa socket connectée a
+serveur. Le serveur doit stocker, dans une liste chaînée, le descripteur
+de chaque socket cliente ainsi que l’adresse et le port source obtenus
+par <code>accept()</code>. Cette liste sera utilisée dans le jalon2.</p>
+<h2 id="interface-des-programmes">Interface des programmes</h2>
+<pre class="text"><code>./client &lt;server_name&gt; &lt;server_port&gt;
+./server &lt;server_port&gt;</code></pre>
+<h2 id="exigences">Exigences</h2>
+<ul>
+<li><strong>Req1.1</strong> — Créer un client TCP qui se connecte au
+serveur indiqué par le nom de domaine et le port passés en
+argument.</li>
+<li><strong>Req1.2</strong> — Créer un serveur avec une socket d’écoute.
+Le port est passé en argument. Le serveur accepte les connexions et
+traite les données entrantes.</li>
+<li><strong>Req1.3</strong> — Le serveur accepte et sert plusieurs
+clients simultanément.</li>
+<li><strong>Req1.4</strong> — Le client lit une chaîne au clavier,
+envoie ensuite la taille de la chaine au serveur (envoyer les octets
+d’un <code>int</code>), puis envoie la chaine au serveur. Le client doit
+ensuite recevoir la réponse du serveur avec ce meme protocole de
+communication.</li>
+<li><strong>Req1.5</strong> — Le client traite en même temps les chaînes
+saisies au clavier et les messages provenant du serveur, avec
+<code>poll()</code>.</li>
+<li><strong>Req1.6</strong> — Lorsqu’il reçoit une chaîne d’un client,
+le serveur la renvoie uniquement à ce client.</li>
+<li><strong>Req1.7</strong> — La connexion se ferme lorsque le client
+envoie <code>/quit</code>. Client et serveur ferment leurs sockets et
+libèrent la mémoire associée aux structures de données.</li>
+<li><strong>Req1.8</strong> — Le serveur conserve les informations de
+chaque client, descripteur de fichier et adresse/port issus de
+<code>accept()</code>, dans une liste chaînée.</li>
+</ul>
+<h2 id="vérification-avant-soumission">Vérification avant
+soumission</h2>
+<ul>
+<li>Lancez plusieurs clients sur le même serveur.</li>
+<li>Vérifiez qu’un message n’est renvoyé qu’à son expéditeur.</li>
+<li>Vérifiez <code>/quit</code>, y compris la fermeture des descripteurs
+et la libération de la liste chaînée.</li>
+<li>Consultez les <a href="ressources.md">ressources de débogage</a>,
+notamment <code>gdb</code>, <code>lsof</code> et
+<code>valgrind</code>.</li>
+</ul>
+</body>
+</html>

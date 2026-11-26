@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <poll.h>
+#include "msg_struct.h"
 
 #define BUFFER_SIZE 1024
 
@@ -71,14 +72,21 @@ int recv_message(int sockfd, char *msg, int msg_size) {
 int echo_client(int sockfd) {
 	char buff[BUFFER_SIZE];
 	while (1) {
+
 		// Send
+        struct message msg_send;
+        int msg_len = sizeof(msg_send);
+        // Send Message Format
+		send_message(sockfd, (char *)&msg_send, msg_len);
+
+        // Send Payload Format
         memset(buff, 0, BUFFER_SIZE);
 		read(STDIN_FILENO, buff, BUFFER_SIZE);
-		int len = strlen(buff);
-		send_next_message_size(sockfd, len);
-		send_message(sockfd, buff, len);
-		printf("Send: %s", buff);
 
+		send_next_message_size(sockfd, msg_send.pld_len);
+		send_message(sockfd, buff, msg_send.pld_len);
+
+		printf("Send: %s", buff);
 		if (strcmp(buff, "/quit\n") == 0)
 			return -1;
 
