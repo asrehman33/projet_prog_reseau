@@ -121,22 +121,21 @@ int echo_client(int sockfd, const char *nick) {
     memset(&msg, 0, sizeof(msg));
 
     if (strncmp(buff, "/nick ", 6) == 0) {
-        // NICKNAME_NEW logic here
-
-        msg.type = NICKNAME_NEW;
-        msg.pld_len = 0;
-        char *nick = buff + 6; // Skip the "/nick " part of the input
-        nick[strcspn(nick, "\n")] = '\0';
-        if (verify_nickname(nick) == -1) {
+        char *new_nick = buff + 6;
+        new_nick[strcspn(new_nick, "\n")] = '\0';
+        if (verify_nickname(new_nick) == -1) {
             // We don't want the program to stop
             return 0;
         }
-        strncpy(msg.infos, nick, INFOS_LEN - 1);
-    }
-
-    if (strcmp(nick, "") == 0 && msg.type != NICKNAME_NEW) {
-        fprintf(stderr, "Nickname not set.\n Use /nick <nickname> to set it.\n");
-        return 0;
+        msg.type = NICKNAME_NEW;
+        strncpy(msg.infos, new_nick, INFOS_LEN - 1);
+    } else {
+        if (nick[0] == '\0' && msg.nick_sender[0] == '\0') {
+            fprintf(stderr, "Nickname not set.\n Use /nick <nickname> to set it.\n");
+            return 0;
+        }
+        // printf("Usage: /nick <pseudo>\n");
+        // return 0;
     }
 
     if (send_protocol_message(sockfd, &msg, NULL) == -1) {  
