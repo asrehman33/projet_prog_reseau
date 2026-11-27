@@ -16,7 +16,8 @@
 #include <errno.h>
 
 #define BUFFER_SIZE 1024
-#define NO_FILE_TRANSFER -1
+#define NO_FILE_TRANSFER -1 // Macro indicating no file transfer is pending.
+#define PORT_FILE_TRANSFER "8081"
 
 struct pending_file_request {
     int type; // A msg_type, or NO_FILE_TRANSFER when no transfer is pending.
@@ -200,7 +201,7 @@ int echo_client(int sockfd, const char *nick, struct pending_file_request *pendi
                 fprintf(stderr, "A file transfer is already awaiting a connection.\n");
                 return 0;
             }
-            int listener_fd = handle_bind_for_file_transfert("8081"); // Bind to any available port for file transfer
+            int listener_fd = handle_bind_for_file_transfert(PORT_FILE_TRANSFER); // Bind to any available port for file transfer
             if (listener_fd == -1) {
                 return -1;
             }
@@ -433,7 +434,7 @@ static int connect_to_peer(char *endpoint, size_t length) {
 }
 
 static int send_file(int fd, const char *nick, struct pending_file_request *state) {
-    char chunk[BUFFER_SIZE];
+    char chunk[PROTO_MAX_PAYLOAD];
     struct message msg = {0};
     msg.type = FILE_SEND;
     strncpy(msg.nick_sender, nick, NICK_LEN - 1);
@@ -522,7 +523,7 @@ static int prepare_download(struct pending_file_request *state) {
 static int receive_file_message(int fd, const char *nick,
                                 struct pending_file_request *state) {
     struct message msg;
-    char chunk[BUFFER_SIZE + 1];
+    char chunk[PROTO_MAX_PAYLOAD + 1];
     if (recv_protocol_message(fd, &msg, chunk, sizeof(chunk)) == -1) {
         fprintf(stderr, "Incomplete file transfer.\n");
         return -1;
@@ -583,7 +584,7 @@ static int receive_file_message(int fd, const char *nick,
 
 int reply_server(int sockfd, char *nick, struct pending_file_request *pending_file_request, struct pollfd *fds) {
     struct message msg;
-    char payload[BUFFER_SIZE];
+    char payload[PROTO_MAX_PAYLOAD + 1];
     if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
         printf("Server closed connection\n");
         return -1;

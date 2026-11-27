@@ -12,7 +12,6 @@
 #include "chained_list.h"
 #include <ctype.h>
 
-#define BUFFER_SIZE 4096
 #define MAX_CNN 20
 
 int die(int ret_value, const char *msg) {
@@ -130,8 +129,8 @@ static int nickname_is_used(const char *nickname, int client_index, struct list 
 
 int handle_client_message(int sockfd, int client_index, struct list *lst) {
     struct message msg;
-    char pld_recv[BUFFER_SIZE];
-    char pld_load[BUFFER_SIZE];
+    char pld_recv[PROTO_MAX_PAYLOAD + 1];
+    char pld_load[PROTO_MAX_PAYLOAD + 1];
 
     char nickname_server[NICK_LEN] = "Server";
 
