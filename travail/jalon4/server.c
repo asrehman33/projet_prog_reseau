@@ -94,7 +94,7 @@ int recv_protocol_message(int sockfd, struct message *msg, char *payload, size_t
     return 0;
 }
 
-static int valid_nickname(const char *infos, char *error, size_t error_size) {
+int valid_nickname(const char *infos, char *error, size_t error_size) {
     const char *nul = memchr(infos, '\0', NICK_LEN);
     if (nul == NULL) {
         snprintf(error, error_size, "Error: nickname is not NUL-terminated");
@@ -121,7 +121,7 @@ static int valid_nickname(const char *infos, char *error, size_t error_size) {
     return 1;
 }
 
-static int nickname_is_used(const char *nickname, int client_index, struct list *lst) {
+int nickname_is_used(const char *nickname, int client_index, struct list *lst) {
     for (int i = 0; i < MAX_CNN; i++) {
         struct node *client = get_node_by_index(lst, i);
 
@@ -133,7 +133,7 @@ static int nickname_is_used(const char *nickname, int client_index, struct list 
     return 0;
 }
 
-static int valid_channel_name(const char *name, char *error, size_t error_size) {
+int valid_channel_name(const char *name, char *error, size_t error_size) {
     const char *nul = memchr(name, '\0', NICK_LEN);
     
     if (nul == NULL) {
@@ -153,7 +153,9 @@ static int valid_channel_name(const char *name, char *error, size_t error_size) 
 
     for (size_t i = 0; i < len; i++) {
         unsigned char c = (unsigned char)name[i];
-        if (!isalnum(c)) {
+        if (!((c >= 'A' && c <= 'Z') ||
+              (c >= 'a' && c <= 'z') ||
+              (c >= '0' && c <= '9'))) {
             snprintf(error, error_size, "Error: channel name must contain only letters and digits");
             return 0;
         }
@@ -161,13 +163,46 @@ static int valid_channel_name(const char *name, char *error, size_t error_size) 
     return 1;
 }
 
-static int channel_exists(struct channel_list_state *channels, const char *name) {
+int channel_exists(struct channel_list_state *channels, const char *name) {
     for (int i = 0; i < channels->count; i++) {
         if (strcmp(channels->names[i], name) == 0) {
             return 1;
         }
     }
     return 0;
+}
+
+int channel_member_count(struct list *lst, const char *channel_name) {
+    int count = 0;
+    struct node *current = lst->head;
+
+    while (current != NULL) {
+        if (strcmp(current->channel_name, channel_name) == 0) {
+            count++;
+        }
+        current = current->next;
+    }
+    return count;
+}
+
+void remove_channel(struct channel_list_state *channels, const char *name) {
+    int found = -1;
+    for (int i = 0; i < channels->count; i++) {
+        if (strcmp(channels->names[i], name) == 0) {
+            found = i;
+            break;
+        }
+    }
+
+    if (found == -1) {
+        return;
+    }
+
+    for (int i = found; i < channels->count - 1; i++) {
+        snprintf(channels->names[i], sizeof(channels->names[i]), "%s", channels->names[i + 1]);
+    }
+    channels->names[channels->count - 1][0] = '\0';
+    channels->count--;
 }
 
 int handle_client_message(int sockfd, int client_index, struct list *lst,
@@ -431,6 +466,7 @@ int handle_client_message(int sockfd, int client_index, struct list *lst,
             return 0;
         }
 
+        // create channel
         strncpy(channels->names[channels->count], msg.infos, NICK_LEN - 1);
         channels->names[channels->count][NICK_LEN - 1] = '\0';
         channels->count++;
@@ -439,6 +475,53 @@ int handle_client_message(int sockfd, int client_index, struct list *lst,
         if (creator == NULL) {
             return -1;
         }
+
+        char old_channel[NICK_LEN];
+        snprintf(old_channel, sizeof(old_channel), "%s", creator->channel_name);
+
+        // He leaves his current living room if there is one.
+        if (old_channel[0] != '\0') {
+            creator->channel_name[0] = '\0';
+
+            if (channel_member_count(lst, old_channel) == 0) {
+                remove_channel(channels, old_channel);
+
+                struct message destroyed;
+                memset(&destroyed, 0, sizeof(destroyed));
+                destroyed.type = MULTICAST_QUIT;
+                destroyed.status = OK;
+                snprintf(destroyed.nick_sender, sizeof(destroyed.nick_sender), "Server");
+                snprintf(destroyed.infos, sizeof(destroyed.infos), "%s", old_channel);
+                destroyed.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                             "You were the last user in this channel, %s has been destroyed",
+                                             old_channel);
+                if (send_protocol_message(sockfd, &destroyed, pld_load) == -1) {
+                    return -1;
+                }
+            } else {
+                struct message departure;
+                memset(&departure, 0, sizeof(departure));
+                departure.type = MULTICAST_QUIT;
+                departure.status = OK;
+                snprintf(departure.nick_sender, sizeof(departure.nick_sender),
+                         "%s", creator->nickname);
+                snprintf(departure.infos, sizeof(departure.infos), "%s", old_channel);
+                departure.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                             "INFO> %s has quit %s",
+                                             creator->nickname, old_channel);
+
+                struct node *member = lst->head;
+                while (member != NULL) {
+                    if (strcmp(member->channel_name, old_channel) == 0) {
+                        if (send_protocol_message(member->fd, &departure, pld_load) == -1) {
+                            return -1;
+                        }
+                    }
+                    member = member->next;
+                }
+            }
+        }
+
         strncpy(creator->channel_name, msg.infos, NICK_LEN - 1);
         creator->channel_name[NICK_LEN - 1] = '\0';
 
@@ -450,6 +533,7 @@ int handle_client_message(int sockfd, int client_index, struct list *lst,
             return -1;
         }
 
+        // join the channel
         struct message joined;
         memset(&joined, 0, sizeof(joined));
         joined.type = MULTICAST_JOIN;

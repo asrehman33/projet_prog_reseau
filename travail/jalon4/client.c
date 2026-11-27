@@ -292,6 +292,15 @@ int reply_server(int sockfd, char *nick) {
             printf("[%s] [%s] %s\n", msg.nick_sender, msg.infos,  payload);
         }
     }
+
+    if (msg.type == MULTICAST_QUIT) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] %s\n", msg.nick_sender, payload);
+        }
+    }
+    
     return 0;
 }
 int handle_connect(char *host, char *port) {
