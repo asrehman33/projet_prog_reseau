@@ -12,6 +12,7 @@ struct node *add_node(struct list *lst, int fd, int index, struct sockaddr_in ad
     new_node->addr = addr;
     new_node->next = NULL;
     new_node->nickname[0] = '\0';
+    new_node->channel_name[0] = '\0';
     new_node->connected_at = connected_at;
 
     if (lst->head == NULL) {

@@ -11,6 +11,7 @@ struct node {
     struct sockaddr_in addr;
     struct node *next;
     char nickname[NICK_LEN];
+    char channel_name[NICK_LEN];
     time_t connected_at;
 };
 

@@ -15,6 +15,11 @@
 #define BUFFER_SIZE 4096
 #define MAX_CNN 20
 
+struct channel_list_state {
+    char names[MAX_CNN][NICK_LEN];
+    int count;
+};
+
 int die(int ret_value, const char *msg) {
     if (ret_value < 0) {
         perror(msg);
@@ -128,7 +133,45 @@ static int nickname_is_used(const char *nickname, int client_index, struct list 
     return 0;
 }
 
-int handle_client_message(int sockfd, int client_index, struct list *lst) {
+static int valid_channel_name(const char *name, char *error, size_t error_size) {
+    const char *nul = memchr(name, '\0', NICK_LEN);
+    
+    if (nul == NULL) {
+        snprintf(error, error_size, "Error: channel name is not NUL-terminated");
+        return 0;
+    }
+
+    size_t len = (size_t)(nul - name);
+    if (len == 0) {
+        snprintf(error, error_size, "Error: channel name cannot be empty");
+        return 0;
+    }
+    if (len >= NICK_LEN) {
+        snprintf(error, error_size, "Error: channel name is too long");
+        return 0;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)name[i];
+        if (!isalnum(c)) {
+            snprintf(error, error_size, "Error: channel name must contain only letters and digits");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int channel_exists(struct channel_list_state *channels, const char *name) {
+    for (int i = 0; i < channels->count; i++) {
+        if (strcmp(channels->names[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int handle_client_message(int sockfd, int client_index, struct list *lst,
+                          struct channel_list_state *channels) {
     struct message msg;
     char pld_recv[BUFFER_SIZE];
     char pld_load[BUFFER_SIZE];
@@ -345,6 +388,84 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         return 0;
     }
 
+    if (msg.type == MULTICAST_CREATE) {
+        struct message reply;
+        char error[INFOS_LEN];
+        memset(&reply, 0, sizeof(reply));
+        reply.type = MULTICAST_CREATE;
+        reply.status = OK;
+        reply.pld_len = 0;
+        strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        if (!valid_channel_name(msg.infos, error, sizeof(error))) {
+            reply.status = ERROR;
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load), "%s", error);
+            strncpy(reply.infos, error, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
+            return 0;
+        }
+
+        if (channel_exists(channels, msg.infos)) {
+            reply.status = ERROR;
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                     "Error: channel %s already exists", msg.infos);
+            strncpy(reply.infos, "Channel already exists", INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
+            return 0;
+        }
+
+        if (channels->count >= MAX_CNN) {
+            reply.status = ERROR;
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                     "Error: maximum number of channels reached");
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
+            return 0;
+        }
+
+        strncpy(channels->names[channels->count], msg.infos, NICK_LEN - 1);
+        channels->names[channels->count][NICK_LEN - 1] = '\0';
+        channels->count++;
+
+        struct node *creator = get_node_by_index(lst, client_index);
+        if (creator == NULL) {
+            return -1;
+        }
+        strncpy(creator->channel_name, msg.infos, NICK_LEN - 1);
+        creator->channel_name[NICK_LEN - 1] = '\0';
+
+        strncpy(reply.infos, msg.infos, INFOS_LEN - 1);
+        reply.infos[INFOS_LEN - 1] = '\0';
+        reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                 "You have created channel %s", msg.infos);
+        if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+            return -1;
+        }
+
+        struct message joined;
+        memset(&joined, 0, sizeof(joined));
+        joined.type = MULTICAST_JOIN;
+        joined.status = OK;
+        strncpy(joined.nick_sender, nickname_server, NICK_LEN - 1);
+        joined.nick_sender[NICK_LEN - 1] = '\0';
+        strncpy(joined.infos, msg.infos, INFOS_LEN - 1);
+        joined.infos[INFOS_LEN - 1] = '\0';
+        joined.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                  "You have joined %s", msg.infos);
+        if (send_protocol_message(sockfd, &joined, pld_load) == -1) {
+            return -1;
+        }
+        return 0;
+    }
+
     if (send_protocol_message(sockfd, &msg, msg.pld_len > 0 ? pld_load : NULL) == -1) {
         return -1;
     }
@@ -394,7 +515,8 @@ int handle_bind(char *port) {
     return sfd;
 }
 
-int handle_multiple_connection(int listen_df, struct list *lst) {
+int handle_multiple_connection(int listen_df, struct list *lst,
+                               struct channel_list_state *channels) {
     struct sockaddr_in client_addr;
     socklen_t size_addr = sizeof(client_addr);
     struct pollfd fds[MAX_CNN];
@@ -440,7 +562,7 @@ int handle_multiple_connection(int listen_df, struct list *lst) {
                 print_list(lst);
                 fds[i].revents = 0;
             } else if ((fds[i].revents & POLLIN) && fds[i].fd != listen_df) {
-                if (handle_client_message(fds[i].fd, i, lst) == -1) {
+                if (handle_client_message(fds[i].fd, i, lst, channels) == -1) {
                     printf("Connection closed by client %d\n", i);
                     close(fds[i].fd);
                     remove_by_fd(lst, fds[i].fd);
@@ -477,7 +599,8 @@ int main(int argc, char *argv[]) {
     }
 
     struct list lst = {0};
-    handle_multiple_connection(sfd, &lst);
+    struct channel_list_state channels = {0};
+    handle_multiple_connection(sfd, &lst, &channels);
     close(sfd);
     return EXIT_SUCCESS;
 }

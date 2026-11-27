@@ -105,6 +105,28 @@ int verify_nickname(const char *nick) {
     }
     return 0;
 }
+
+int verify_channel_name(const char *channel_name) {
+    int channel_len = strlen(channel_name);
+    if (channel_len == 0) {
+        fprintf(stderr, "Channel name cannot be empty\n");
+        return -1;
+    }
+    if (channel_len >= NICK_LEN) {
+        fprintf(stderr, "Channel name too long\n");
+        return -1;
+    }
+
+    for (int i = 0; i < channel_len; i++) {
+        unsigned char c = (unsigned char)channel_name[i];
+        if (!isalnum(c)) {
+            fprintf(stderr, "Channel name must contain only letters and digits\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
 int echo_client(int sockfd, const char *nick) {
     char buff[BUFFER_SIZE];
     memset(buff, 0, BUFFER_SIZE);
@@ -178,11 +200,23 @@ int echo_client(int sockfd, const char *nick) {
             msg.pld_len = strlen(msg_payload);
             payload = msg_payload;
         }
+
+        if (strncmp(buff, "/create ", 8) == 0) {
+            char *channel_name = buff + 8;
+            channel_name[strcspn(channel_name, "\r\n")] = '\0';
+            if (verify_channel_name(channel_name) == -1) {
+                return 0;
+            }
+            msg.type = MULTICAST_CREATE;
+            command_found = 1;
+            strncpy(msg.infos, channel_name, INFOS_LEN - 1);
+            msg.infos[INFOS_LEN - 1] = '\0';
+        }
     }
 
     if (!command_found) {
         if (buff[0] == '/') {
-            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall or /msg.\n");
+            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall, /msg or /create.\n");
             return 0;
         }
         msg.type = ECHO_SEND;
@@ -240,6 +274,22 @@ int reply_server(int sockfd, char *nick) {
             fprintf(stderr, "%s\n", payload);
         } else {
             printf("[%s] (privé) %s\n", msg.nick_sender, payload);
+        }
+    }
+
+    if (msg.type == MULTICAST_CREATE) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] %s\n", msg.nick_sender, payload);
+        }
+    }
+
+    if (msg.type == MULTICAST_JOIN) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] [%s] %s\n", msg.nick_sender, msg.infos,  payload);
         }
     }
     return 0;
