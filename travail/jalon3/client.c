@@ -105,6 +105,7 @@ int verify_nickname(const char *nick) {
     }
     return 0;
 }
+
 int echo_client(int sockfd, const char *nick) {
     char buff[BUFFER_SIZE];
     memset(buff, 0, BUFFER_SIZE);
