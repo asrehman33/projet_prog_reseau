@@ -105,6 +105,7 @@ int verify_nickname(const char *nick) {
     }
     return 0;
 }
+
 int echo_client(int sockfd, const char *nick) {
     char buff[BUFFER_SIZE];
     memset(buff, 0, BUFFER_SIZE);
@@ -173,6 +174,23 @@ int echo_client(int sockfd, const char *nick) {
             *msg_payload = '\0';
             msg_payload++;
             msg.type = UNICAST_SEND;
+            command_found = 1;
+            strncpy(msg.infos, dest, INFOS_LEN - 1);
+            msg.pld_len = strlen(msg_payload);
+            payload = msg_payload;
+        }
+
+        if (strncmp(buff, "/send ", 6) == 0) {
+            char *dest = buff + 6;
+            dest[strcspn(dest, "\n")] = '\0'; // Replace \n with \0
+            char *msg_payload = strchr(dest, ' '); // Find the first space separating the nickname and the file path
+            if (msg_payload == NULL) {
+                fprintf(stderr, "Usage: /send <nickname> <file_path>\n");
+                return 0;
+            }
+            *msg_payload = '\0';
+            msg_payload++;
+            msg.type = FILE_SEND;
             command_found = 1;
             strncpy(msg.infos, dest, INFOS_LEN - 1);
             msg.pld_len = strlen(msg_payload);
