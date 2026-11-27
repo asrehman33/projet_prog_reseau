@@ -199,7 +199,7 @@ void remove_channel(struct channel_list_state *channels, const char *name) {
     }
 
     for (int i = found; i < channels->count - 1; i++) {
-        snprintf(channels->names[i], sizeof(channels->names[i]), "%s", channels->names[i + 1]);
+        memmove(channels->names[i], channels->names[i + 1], sizeof(channels->names[i]));
     }
     channels->names[channels->count - 1][0] = '\0';
     channels->count--;
@@ -545,6 +545,31 @@ int handle_client_message(int sockfd, int client_index, struct list *lst,
         joined.pld_len = snprintf(pld_load, sizeof(pld_load),
                                   "You have joined %s", msg.infos);
         if (send_protocol_message(sockfd, &joined, pld_load) == -1) {
+            return -1;
+        }
+        return 0;
+    }
+
+    if (msg.type == MULTICAST_LIST) {
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = MULTICAST_LIST;
+        reply.status = OK;
+        strncpy(reply.nick_sender, nickname_server, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        pld_load[0] = '\0';
+        size_t index = 0;
+        reply.pld_len = 0;
+        for (int i = 0; i < channels->count; i++) {
+            reply.pld_len += snprintf(pld_load + index,
+                                      sizeof(pld_load) - index,
+                                      "- %s\n", channels->names[i]);
+            index = (size_t)reply.pld_len;
+        }
+
+        if (send_protocol_message(sockfd, &reply,
+                                  reply.pld_len > 0 ? pld_load : NULL) == -1) {
             return -1;
         }
         return 0;

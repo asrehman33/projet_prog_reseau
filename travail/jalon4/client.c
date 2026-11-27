@@ -212,11 +212,17 @@ int echo_client(int sockfd, const char *nick) {
             strncpy(msg.infos, channel_name, INFOS_LEN - 1);
             msg.infos[INFOS_LEN - 1] = '\0';
         }
+
+        if (strncmp(buff, "/channel_list", 13) == 0) {
+            msg.type = MULTICAST_LIST;
+            command_found = 1;
+            msg.infos[0] = '\0';
+        }
     }
 
     if (!command_found) {
         if (buff[0] == '/') {
-            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall, /msg or /create.\n");
+            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall, /msg, /create or /channel_list.\n");
             return 0;
         }
         msg.type = ECHO_SEND;
@@ -290,6 +296,16 @@ int reply_server(int sockfd, char *nick) {
             fprintf(stderr, "%s\n", payload);
         } else {
             printf("[%s] [%s] %s\n", msg.nick_sender, msg.infos,  payload);
+        }
+    }
+
+    if (msg.type == MULTICAST_LIST) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else if (payload[0] == '\0') {
+            printf("[%s] No channels available\n", msg.nick_sender);
+        } else {
+            printf("[%s] Available channels:\n%s", msg.nick_sender, payload);
         }
     }
 
