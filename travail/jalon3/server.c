@@ -364,6 +364,80 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         return 0;
     }
 
+    if (msg.type == FILE_ACCEPT) {
+        // client2 accepts the file transfer request from client1
+        struct node *sender = get_node_by_index(lst, client_index);
+        if (sender == NULL) {
+            return -1;
+        }
+        struct node *dest = find_client_by_nickname(msg.infos, lst);
+
+        // no payload is needed for FILE_ACCEPT message
+
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = FILE_ACCEPT;
+
+        strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0'; // ensure null-terminated string for sender nickname
+        strncpy(reply.infos, msg.infos, NICK_LEN - 1);
+        reply.infos[NICK_LEN - 1] = '\0'; // ensure null-terminated string for recipient nickname
+
+        if (dest != NULL) {
+            if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+                return -1;
+            }
+            printf("Forwarded FILE_ACCEPT from %s to %s\n", sender->nickname, dest->nickname);
+        } else {
+            reply.status = ERROR;
+            strncpy(reply.infos, msg.infos, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                     "User '%s' not found", msg.infos);
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    if (msg.type == FILE_REJECT) {
+        // client2 rejects the file transfer request from client1
+        struct node *sender = get_node_by_index(lst, client_index);
+        if (sender == NULL) {
+            return -1;
+        }
+        struct node *dest = find_client_by_nickname(msg.infos, lst);
+
+        // no payload is needed for FILE_REJECT message
+
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = FILE_REJECT;
+
+        strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0'; // ensure null-terminated string for sender nickname
+        strncpy(reply.infos, msg.infos, NICK_LEN - 1);
+        reply.infos[NICK_LEN - 1] = '\0'; // ensure null-terminated string for recipient nickname
+
+        if (dest != NULL) {
+            if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+                return -1;
+            }
+            printf("Forwarded FILE_REJECT from %s to %s\n", sender->nickname, dest->nickname);
+        } else {
+            reply.status = ERROR;
+            strncpy(reply.infos, msg.infos, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                     "User '%s' not found", msg.infos);
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
     if (msg.type == ECHO_SEND) {
         struct node *sender = get_node_by_index(lst, client_index);
         if (sender == NULL) {
