@@ -11,6 +11,7 @@
 #include <ctype.h>
 
 #define BUFFER_SIZE 1024
+#define PORT_FILE_TRANSFERT = 8081
 
 struct pending_file_request {
     int is_pending;
@@ -125,16 +126,16 @@ int echo_client(int sockfd, const char *nick, struct pending_file_request *pendi
     int command_found = 0;
 
     if (pending_file_request->is_pending == 1) {
+        // Handle pending file request confirmation (Y/N)
         if (strncmp(buff, "Y\n", 2) == 0 || strncmp(buff, "y\n", 2) == 0) {
             msg.type = FILE_ACCEPT;
             command_found = 1;
             strncpy(msg.infos, pending_file_request->dest, INFOS_LEN - 1);
             msg.infos[INFOS_LEN - 1] = '\0';
-            // FILE_ACCEPT logic here
+            // Send listening address and port for the file transfer
         } else if (strncmp(buff, "N\n", 2) == 0 || strncmp(buff, "n\n", 2) == 0) {
             msg.type = FILE_REJECT;
             command_found = 1;
-            // FILE_REJECT logic here
             strncpy(msg.infos, pending_file_request->dest, INFOS_LEN - 1);
             msg.infos[INFOS_LEN - 1] = '\0';
         }
@@ -362,13 +363,22 @@ int main(int argc, char *argv[]) {
 	int sfd;
 	sfd = handle_connect(host, port);
 
-	struct pollfd fds[2] = {0};
+	struct pollfd fds[4] = {0}; // 2 more for file transfer sockets
+    // Initialize pollfd for stdin and server socket
     fds[0].fd = 0;
     fds[0].events = POLLIN;
     fds[0].revents = 0;
     fds[1].fd = sfd;
     fds[1].events = POLLIN;
     fds[1].revents = 0;
+
+    // Initialize pollfd for file transfer sockets
+    fds[2].fd = -1;
+    fds[2].events = POLLIN;
+    fds[2].revents = 0;
+    fds[3].fd = -1;
+    fds[3].events = POLLIN;
+    fds[3].revents = 0;
 
     char nick[NICK_LEN] = "";
     struct pending_file_request pending_file_request = {0};
