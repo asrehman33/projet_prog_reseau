@@ -178,11 +178,38 @@ int echo_client(int sockfd, const char *nick) {
             msg.pld_len = strlen(msg_payload);
             payload = msg_payload;
         }
+
+        if (strncmp(buff, "/send ", 6) == 0) {
+            char *request = buff + 6;
+            request[strcspn(request, "\n")] = '\0';
+
+            size_t separator = strcspn(request, " ");
+            char *filename = request + separator;
+            if (*filename == '\0') {
+                fprintf(stderr, "Usage: /send <nickname> <filename>\n");
+                return 0;
+            }
+            *filename++ = '\0';
+ 
+            if (verify_nickname(request) == -1) {
+                return 0;
+            }
+            if (*filename == '\0') {
+                fprintf(stderr, "Usage: /send <nickname> <filename>\n");
+                return 0;
+            }
+
+            msg.type = FILE_REQUEST;
+            command_found = 1;
+            strncpy(msg.infos, request, INFOS_LEN - 1);
+            msg.pld_len = strlen(filename);
+            payload = filename;
+        }
     }
 
     if (!command_found) {
         if (buff[0] == '/') {
-            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall or /msg.\n");
+            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall, /msg or /send.\n");
             return 0;
         }
         msg.type = ECHO_SEND;
