@@ -325,6 +325,41 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         return 0;
     }
 
+    if (msg.type == FILE_REQUEST) {
+        struct node *sender = get_node_by_index(lst, client_index);
+        if (sender == NULL) {
+            return -1;
+        }
+        struct node *dest = find_client_by_nickname(msg.infos, lst);
+        strncpy(pld_load, pld_recv, (size_t)msg.pld_len);
+        pld_load[msg.pld_len] = '\0';
+
+        struct message reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = FILE_SEND;
+        reply.pld_len = msg.pld_len;
+        reply.status = OK;
+
+        strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
+        reply.nick_sender[NICK_LEN - 1] = '\0';
+
+        if (dest != NULL) {
+            if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+                return -1;
+            }
+        } else {
+            reply.status = ERROR;
+            strncpy(reply.infos, msg.infos, INFOS_LEN - 1);
+            reply.infos[INFOS_LEN - 1] = '\0';
+            reply.pld_len = snprintf(pld_load, sizeof(pld_load),
+                                     "User '%s' not found", msg.infos);
+            if (send_protocol_message(sockfd, &reply, pld_load) == -1) {
+                return -1;
+            }
+        }
+        return 0;
+    }
+
     if (msg.type == ECHO_SEND) {
         struct node *sender = get_node_by_index(lst, client_index);
         if (sender == NULL) {
