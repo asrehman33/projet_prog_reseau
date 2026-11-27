@@ -372,19 +372,10 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         }
         struct node *dest = find_client_by_nickname(msg.infos, lst);
 
-        char *address = inet_ntoa(sender->addr.sin_addr);
-        unsigned short port = ntohs(sender->addr.sin_port);
-        
         struct message reply;
         memset(&reply, 0, sizeof(reply));
         reply.type = FILE_ACCEPT;
-        reply.pld_len = snprintf(pld_load, sizeof(pld_load), "%s:%u",
-                                 address, (unsigned int)port);
-        if (reply.pld_len < 0 ||
-            (size_t)reply.pld_len >= sizeof(pld_load)) {
-            fprintf(stderr, "Could not format receiver address\n");
-            return -1;
-        }
+        reply.pld_len = msg.pld_len;
 
         strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
         reply.nick_sender[NICK_LEN - 1] = '\0'; // ensure null-terminated string for sender nickname
@@ -392,7 +383,7 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         reply.infos[NICK_LEN - 1] = '\0'; // ensure null-terminated string for recipient nickname
 
         if (dest != NULL) {
-            if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
+            if (send_protocol_message(dest->fd, &reply, pld_recv) == -1) {
                 return -1;
             }
             printf("Forwarded FILE_ACCEPT from %s to %s\n", sender->nickname, dest->nickname);

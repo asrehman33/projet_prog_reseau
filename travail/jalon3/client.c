@@ -11,11 +11,11 @@
 #include <ctype.h>
 
 #define BUFFER_SIZE 1024
-#define PORT_FILE_TRANSFERT = 8081
 
 struct pending_file_request {
     int is_pending;
     char dest[INFOS_LEN];
+    int listener_fd;
 };
 
 int die(int ret_value, char *msg) {
@@ -112,8 +112,51 @@ int verify_nickname(const char *nick) {
     return 0;
 }
 
+int handle_bind_for_file_transfert(char *port) {
+    struct addrinfo hints, *result, *rp;
+    int ftfd;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    if (getaddrinfo(NULL, port, &hints, &result) != 0) {
+        perror("getaddrinfo()");
+        exit(EXIT_FAILURE);
+    }
+
+    for (rp = result; rp != NULL; rp = rp->ai_next) {
+        ftfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (ftfd == -1) {
+            continue;
+        }
+
+        if (setsockopt(ftfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) == -1) {
+            perror("setsockopt - in main");
+            close(ftfd);
+            freeaddrinfo(result);
+            exit(EXIT_FAILURE);
+        }
+
+        if (bind(ftfd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            break;
+        }
+        close(ftfd);
+    }
+
+    if (rp == NULL) {
+        perror("Could not bind");
+        freeaddrinfo(result);
+        exit(EXIT_FAILURE);
+    }
+
+    freeaddrinfo(result);
+    return ftfd;
+}
+
 int echo_client(int sockfd, const char *nick, struct pending_file_request *pending_file_request) {
     char buff[BUFFER_SIZE];
+    
     memset(buff, 0, BUFFER_SIZE);
     if (read(STDIN_FILENO, buff, BUFFER_SIZE - 1) <= 0) {
         return -1;
@@ -128,16 +171,54 @@ int echo_client(int sockfd, const char *nick, struct pending_file_request *pendi
     if (pending_file_request->is_pending == 1) {
         // Handle pending file request confirmation (Y/N)
         if (strncmp(buff, "Y\n", 2) == 0 || strncmp(buff, "y\n", 2) == 0) {
+            char endpoint[INET_ADDRSTRLEN + 6];
             msg.type = FILE_ACCEPT;
             command_found = 1;
             strncpy(msg.infos, pending_file_request->dest, INFOS_LEN - 1);
             msg.infos[INFOS_LEN - 1] = '\0';
-            // Send listening address and port for the file transfer
+            if (pending_file_request->listener_fd != -1) {
+                fprintf(stderr, "A file transfer is already awaiting a connection.\n");
+                return 0;
+            }
+            int listener_fd = handle_bind_for_file_transfert("8081"); // Bind to any available port for file transfer
+            if (listener_fd == -1) {
+                return -1;
+            }
+            struct sockaddr_in local_addr;
+            struct sockaddr_in listen_addr;
+            socklen_t local_len = sizeof(local_addr);
+            socklen_t listen_len = sizeof(listen_addr);
+            char address[INET_ADDRSTRLEN];
+            if (listen(listener_fd, 1) == -1 ||
+                getsockname(listener_fd, (struct sockaddr *)&listen_addr, &listen_len) == -1 ||
+                getsockname(sockfd, (struct sockaddr *)&local_addr, &local_len) == -1) { // Get local address for the main socket to determine the correct IP for file transfer
+                perror("Could not prepare file transfer listener");
+                close(listener_fd);
+                return -1;
+            }
+            if (local_addr.sin_family != AF_INET ||
+                inet_ntop(AF_INET, &local_addr.sin_addr, address, sizeof(address)) == NULL) { // Convert local IPv4 address to string for file transfer endpoint
+                fprintf(stderr, "Could not determine local IPv4 address\n");
+                close(listener_fd);
+                return -1;
+            }
+            msg.pld_len = snprintf(endpoint, sizeof(endpoint), "%s:%u",
+                                   address, (unsigned int)ntohs(listen_addr.sin_port));
+            if (msg.pld_len < 0 || (size_t)msg.pld_len >= sizeof(endpoint)) {
+                fprintf(stderr, "Could not format file transfer address\n");
+                close(listener_fd);
+                return -1;
+            }
+            payload = endpoint;
+            pending_file_request->listener_fd = listener_fd;
         } else if (strncmp(buff, "N\n", 2) == 0 || strncmp(buff, "n\n", 2) == 0) {
             msg.type = FILE_REJECT;
             command_found = 1;
             strncpy(msg.infos, pending_file_request->dest, INFOS_LEN - 1);
             msg.infos[INFOS_LEN - 1] = '\0';
+        } else {
+            fprintf(stderr, "Please answer Y or N.\n");
+            return 0;
         }
         pending_file_request->is_pending = 0;
     }
@@ -298,6 +379,15 @@ int reply_server(int sockfd, char *nick, struct pending_file_request *pending_fi
         if (msg.status == ERROR) {
             fprintf(stderr, "%s\n", payload);
         } else {
+            if (pending_file_request->is_pending ||
+                pending_file_request->listener_fd != -1) { // Already handling a file request, cannot accept another one simultaneously
+                struct message reject = {0};
+                reject.type = FILE_REJECT;
+                strncpy(reject.nick_sender, nick, NICK_LEN - 1);
+                strncpy(reject.infos, msg.nick_sender, INFOS_LEN - 1);
+                fprintf(stderr, "Already handling a file request; rejecting another.\n");
+                return send_protocol_message(sockfd, &reject, NULL);
+            }
             printf("[%s] wants you to accept the transfer of the file \"%s\". Do you accept ? [Y/N]\n", msg.nick_sender, payload);
             pending_file_request->is_pending = 1;
             strncpy(pending_file_request->dest, msg.nick_sender, INFOS_LEN - 1);
@@ -306,10 +396,15 @@ int reply_server(int sockfd, char *nick, struct pending_file_request *pending_fi
     }
 
     if (msg.type == FILE_ACCEPT) {
-        if (msg.status == ERROR) {
+        if (msg.status == ERROR) { // File transfer request was rejected or encountered an error
             fprintf(stderr, "%s\n", payload);
+            if (pending_file_request->listener_fd != -1 &&
+                strcmp(msg.infos, pending_file_request->dest) == 0) {
+                close(pending_file_request->listener_fd);
+                pending_file_request->listener_fd = -1;
+            }
         } else {
-            printf("[%s] accepted the file transfer.\n", msg.nick_sender);
+            printf("[%s] accepted the file transfer. Address: %s\n", msg.nick_sender, payload);
         }
     }
 
@@ -381,18 +476,24 @@ int main(int argc, char *argv[]) {
     fds[3].revents = 0;
 
     char nick[NICK_LEN] = "";
-    struct pending_file_request pending_file_request = {0};
+    struct pending_file_request pending_file_request = {.listener_fd = -1};
 
 	while (1) {
         int nfds = poll(fds, 2, -1);
         if (nfds < 0) {
             perror("poll");
+            if (pending_file_request.listener_fd != -1) {
+                close(pending_file_request.listener_fd);
+            }
 			close(sfd);
             exit(EXIT_FAILURE);
         }
         if (fds[0].revents & POLLIN) {
             // Read from stdin
             if (echo_client(sfd, nick, &pending_file_request) == -1) {
+                if (pending_file_request.listener_fd != -1) {
+                    close(pending_file_request.listener_fd);
+                }
                 close(sfd);
                 return -1;
             }
@@ -402,6 +503,9 @@ int main(int argc, char *argv[]) {
             // Read from server
 			sleep(1);
             if (reply_server(sfd, nick, &pending_file_request) == -1) {
+                if (pending_file_request.listener_fd != -1) {
+                    close(pending_file_request.listener_fd);
+                }
                 close(sfd);
                 return -1;
             }
