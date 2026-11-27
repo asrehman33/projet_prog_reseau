@@ -326,6 +326,7 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
     }
 
     if (msg.type == FILE_REQUEST) {
+        // client1 wants to send a file to client2
         struct node *sender = get_node_by_index(lst, client_index);
         if (sender == NULL) {
             return -1;
@@ -336,17 +337,20 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
 
         struct message reply;
         memset(&reply, 0, sizeof(reply));
-        reply.type = FILE_SEND;
+        reply.type = FILE_REQUEST;
         reply.pld_len = msg.pld_len;
         reply.status = OK;
 
         strncpy(reply.nick_sender, sender->nickname, NICK_LEN - 1);
-        reply.nick_sender[NICK_LEN - 1] = '\0';
+        reply.nick_sender[NICK_LEN - 1] = '\0'; // ensure null-terminated string for sender nickname
+        strncpy(reply.infos, msg.infos, NICK_LEN - 1);
+        reply.infos[NICK_LEN - 1] = '\0'; // ensure null-terminated string for recipient nickname
 
         if (dest != NULL) {
             if (send_protocol_message(dest->fd, &reply, reply.pld_len > 0 ? pld_load : NULL) == -1) {
                 return -1;
             }
+            printf("Forwarded FILE_REQUEST from %s to %s\n", sender->nickname, dest->nickname);
         } else {
             reply.status = ERROR;
             strncpy(reply.infos, msg.infos, INFOS_LEN - 1);
