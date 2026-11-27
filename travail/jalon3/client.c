@@ -12,6 +12,11 @@
 
 #define BUFFER_SIZE 1024
 
+struct pending_file_request {
+    int is_pending;
+    char dest[INFOS_LEN];
+};
+
 int die(int ret_value, char *msg) {
     if (ret_value < 0) {
         perror(msg);
@@ -106,15 +111,10 @@ int verify_nickname(const char *nick) {
     return 0;
 }
 
-int echo_client(int sockfd, const char *nick) {
+int echo_client(int sockfd, const char *nick, struct pending_file_request *pending_file_request) {
     char buff[BUFFER_SIZE];
     memset(buff, 0, BUFFER_SIZE);
     if (read(STDIN_FILENO, buff, BUFFER_SIZE - 1) <= 0) {
-        return -1;
-    }
-
-    if (strcmp(buff, "/quit\n") == 0) {
-        // QUIT logic here
         return -1;
     }
 
@@ -123,6 +123,28 @@ int echo_client(int sockfd, const char *nick) {
     strncpy(msg.nick_sender, nick, NICK_LEN - 1); // Copy the current nickname into the message sender field
     char *payload = "";
     int command_found = 0;
+
+    if (pending_file_request->is_pending == 1) {
+        if (strncmp(buff, "Y\n", 2) == 0 || strncmp(buff, "y\n", 2) == 0) {
+            msg.type = FILE_ACCEPT;
+            command_found = 1;
+            strncpy(msg.infos, pending_file_request->dest, INFOS_LEN - 1);
+            msg.infos[INFOS_LEN - 1] = '\0';
+            // FILE_ACCEPT logic here
+        } else if (strncmp(buff, "N\n", 2) == 0 || strncmp(buff, "n\n", 2) == 0) {
+            msg.type = FILE_REJECT;
+            command_found = 1;
+            // FILE_REJECT logic here
+            strncpy(msg.infos, pending_file_request->dest, INFOS_LEN - 1);
+            msg.infos[INFOS_LEN - 1] = '\0';
+        }
+        pending_file_request->is_pending = 0;
+    }
+
+    if (strcmp(buff, "/quit\n") == 0) {
+        // QUIT logic here
+        return -1;
+    }
 
     if (strncmp(buff, "/nick ", 6) == 0) {
         char *new_nick = buff + 6;
@@ -181,26 +203,36 @@ int echo_client(int sockfd, const char *nick) {
         }
 
         if (strncmp(buff, "/send ", 6) == 0) {
-            char *dest = buff + 6;
-            dest[strcspn(dest, "\n")] = '\0'; // Replace \n with \0
-            char *msg_payload = strchr(dest, ' '); // Find the first space separating the nickname and the file path
-            if (msg_payload == NULL) {
-                fprintf(stderr, "Usage: /send <nickname> <file_path>\n");
+            char *request = buff + 6;
+            request[strcspn(request, "\n")] = '\0';
+
+            size_t separator = strcspn(request, " ");
+            char *filename = request + separator;
+            if (*filename == '\0') {
+                fprintf(stderr, "Usage: /send <nickname> <filename>\n");
                 return 0;
             }
-            *msg_payload = '\0';
-            msg_payload++;
-            msg.type = FILE_SEND;
+            *filename++ = '\0';
+ 
+            if (verify_nickname(request) == -1) {
+                return 0;
+            }
+            if (*filename == '\0') {
+                fprintf(stderr, "Usage: /send <nickname> <filename>\n");
+                return 0;
+            }
+
+            msg.type = FILE_REQUEST;
             command_found = 1;
-            strncpy(msg.infos, dest, INFOS_LEN - 1);
-            msg.pld_len = strlen(msg_payload);
-            payload = msg_payload;
+            strncpy(msg.infos, request, INFOS_LEN - 1);
+            msg.pld_len = strlen(filename);
+            payload = filename;
         }
     }
 
     if (!command_found) {
         if (buff[0] == '/') {
-            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall or /msg.\n");
+            fprintf(stderr, "Unknown command. Use /nick, /who, /whois, /msgall, /msg or /send.\n");
             return 0;
         }
         msg.type = ECHO_SEND;
@@ -216,7 +248,7 @@ int echo_client(int sockfd, const char *nick) {
     return 0;
 }
 
-int reply_server(int sockfd, char *nick) {
+int reply_server(int sockfd, char *nick, struct pending_file_request *pending_file_request) {
     struct message msg;
     char payload[BUFFER_SIZE];
     if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
@@ -260,8 +292,36 @@ int reply_server(int sockfd, char *nick) {
             printf("[%s] (privé) %s\n", msg.nick_sender, payload);
         }
     }
+
+    if (msg.type == FILE_REQUEST) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] wants you to accept the transfer of the file \"%s\". Do you accept ? [Y/N]\n", msg.nick_sender, payload);
+            pending_file_request->is_pending = 1;
+            strncpy(pending_file_request->dest, msg.nick_sender, INFOS_LEN - 1);
+            pending_file_request->dest[INFOS_LEN - 1] = '\0';
+        }
+    }
+
+    if (msg.type == FILE_ACCEPT) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] accepted the file transfer.\n", msg.nick_sender);
+        }
+    }
+
+    if (msg.type == FILE_REJECT) {
+        if (msg.status == ERROR) {
+            fprintf(stderr, "%s\n", payload);
+        } else {
+            printf("[%s] rejected the file transfer.\n", msg.nick_sender);
+        }
+    }
     return 0;
 }
+
 int handle_connect(char *host, char *port) {
 	struct addrinfo hints, *result, *rp;
 	int sfd;
@@ -311,6 +371,7 @@ int main(int argc, char *argv[]) {
     fds[1].revents = 0;
 
     char nick[NICK_LEN] = "";
+    struct pending_file_request pending_file_request = {0};
 
 	while (1) {
         int nfds = poll(fds, 2, -1);
@@ -321,7 +382,7 @@ int main(int argc, char *argv[]) {
         }
         if (fds[0].revents & POLLIN) {
             // Read from stdin
-            if (echo_client(sfd, nick) == -1) {
+            if (echo_client(sfd, nick, &pending_file_request) == -1) {
                 close(sfd);
                 return -1;
             }
@@ -330,7 +391,7 @@ int main(int argc, char *argv[]) {
         if (fds[1].revents & POLLIN) {
             // Read from server
 			sleep(1);
-            if (reply_server(sfd, nick) == -1) {
+            if (reply_server(sfd, nick, &pending_file_request) == -1) {
                 close(sfd);
                 return -1;
             }
