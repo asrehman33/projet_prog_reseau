@@ -240,7 +240,7 @@ int echo_client(int sockfd, const char *nick) {
 
 int reply_server(int sockfd, char *nick) {
     struct message msg;
-    char payload[BUFFER_SIZE];
+    char payload[PROTO_MAX_PAYLOAD + 1];
     if (recv_protocol_message(sockfd, &msg, payload, sizeof(payload)) == -1) {
         printf("Server closed connection\n");
         return -1;
