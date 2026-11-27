@@ -372,8 +372,6 @@ int handle_client_message(int sockfd, int client_index, struct list *lst) {
         }
         struct node *dest = find_client_by_nickname(msg.infos, lst);
 
-        // no payload is needed for FILE_ACCEPT message
-
         struct message reply;
         memset(&reply, 0, sizeof(reply));
         reply.type = FILE_ACCEPT;
